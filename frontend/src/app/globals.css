@@ -1,0 +1,207 @@
+@import "tailwindcss";
+
+:root {
+  --sa-sidebar: #0f0f13;
+  --sa-card: #16161d;
+  --sa-card-hover: #1c1c26;
+  --sa-card-solid: #1a1a24;
+  --sa-border: #1e1e2a;
+  --sa-border-solid: #2a2a3a;
+  --sa-input: #12121a;
+  --sa-text: #e8e8ed;
+  --sa-text-secondary: #c4c4cf;
+  --sa-text-muted: #8888a0;
+  --sa-text-dim: #5a5a72;
+  --sa-accent: #ef4444;
+  --sa-header-bg: #0d0d12;
+  --sa-row-hover: #1a1a26;
+  --sa-chart-bg: #13131c;
+  --sa-overlay: rgba(0, 0, 0, 0.6);
+  --z-modal-overlay: 40;
+  --z-dialog: 50;
+  --z-dropdown: 60;
+  --sa-sidebar-collapsed: 68px;
+  --sa-sidebar-expanded: 220px;
+}
+
+[data-sa-theme="light"] {
+  --sa-sidebar: #f8f9fa;
+  --sa-card: #ffffff;
+  --sa-card-hover: #f3f4f6;
+  --sa-card-solid: #f0f1f3;
+  --sa-border: #e5e7eb;
+  --sa-border-solid: #d1d5db;
+  --sa-input: #f9fafb;
+  --sa-text: #111827;
+  --sa-text-secondary: #374151;
+  --sa-text-muted: #6b7280;
+  --sa-text-dim: #9ca3af;
+  --sa-accent: #dc2626;
+  --sa-header-bg: #f3f4f6;
+  --sa-row-hover: #f9fafb;
+  --sa-chart-bg: #f8f9fa;
+  --sa-overlay: rgba(0, 0, 0, 0.3);
+}
+
+[data-sa-theme="sky"] {
+  --sa-sidebar: #0c1929;
+  --sa-card: #0f1f33;
+  --sa-card-hover: #13273f;
+  --sa-card-solid: #0e1e30;
+  --sa-border: #1a2d45;
+  --sa-border-solid: #25405e;
+  --sa-input: #0b1828;
+  --sa-text: #dce8f5;
+  --sa-text-secondary: #b8cce0;
+  --sa-text-muted: #6e8ba8;
+  --sa-text-dim: #4a6680;
+  --sa-accent: #3b82f6;
+  --sa-header-bg: #091421;
+  --sa-row-hover: #112438;
+  --sa-chart-bg: #0d1c2e;
+  --sa-overlay: rgba(0, 0, 0, 0.6);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--sa-card);
+  color: var(--sa-text);
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+@keyframes animate-in {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes animate-out {
+  from { opacity: 1; transform: scale(1); }
+  to { opacity: 0; transform: scale(0.95); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes slide-in-from-top-2 {
+  from { transform: translateY(-0.5rem); }
+  to { transform: translateY(0); }
+}
+
+@keyframes slide-out-to-top-2 {
+  from { transform: translateY(0); }
+  to { transform: translateY(-0.5rem); }
+}
+
+@keyframes slide-in-from-left-2 {
+  from { transform: translateX(-0.5rem); }
+  to { transform: translateX(0); }
+}
+
+@keyframes slide-out-to-left-2 {
+  from { transform: translateX(0); }
+  to { transform: translateX(-0.5rem); }
+}
+
+@keyframes zoom-in-95 {
+  from { transform: scale(0.95); }
+  to { transform: scale(1); }
+}
+
+@keyframes zoom-out-95 {
+  from { transform: scale(1); }
+  to { transform: scale(0.95); }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.animate-in {
+  animation: animate-in 0.2s ease-out;
+}
+
+.animate-out {
+  animation: animate-out 0.2s ease-in;
+}
+
+.animate-pulse {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+.data-\[state\=open\]\:animate-in[data-state="open"] {
+  animation: animate-in 0.2s ease-out;
+}
+
+.data-\[state\=closed\]\:animate-out[data-state="closed"] {
+  animation: animate-out 0.2s ease-in;
+}
+
+.data-\[state\=closed\]\:fade-out-0[data-state="closed"] {
+  animation: fade-out 0.2s ease-in;
+}
+
+.data-\[state\=open\]\:fade-in-0[data-state="open"] {
+  animation: fade-in 0.2s ease-out;
+}
+
+.data-\[state\=closed\]\:zoom-out-95[data-state="closed"] {
+  animation: zoom-out-95 0.2s ease-in;
+}
+
+.data-\[state\=open\]\:zoom-in-95[data-state="open"] {
+  animation: zoom-in-95 0.2s ease-out;
+}
+
+.data-\[side\=bottom\]\:slide-in-from-top-2[data-side="bottom"] {
+  animation: slide-in-from-top-2 0.2s ease-out;
+}
+
+.data-\[side\=top\]\:slide-in-from-bottom-2[data-side="top"] {
+  animation: slide-in-from-bottom-2 0.2s ease-out;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--sa-border-solid);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--sa-text-dim);
+}
