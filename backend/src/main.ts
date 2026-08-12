@@ -1,53 +1,78 @@
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import cors from '@fastify/cors';
 import cookie from '@fastify/cookie';
+import { randomUUID } from 'crypto';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import { ConfigService } from '@nestjs/config';
+import { AppConfigService } from './config/app.config';
 import { AppModule } from './app.module';
-import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { GlobalValidationPipe } from './common/pipes/validation.pipe';
-import { TransformInterceptor } from './common/interceptors/transform.interceptor';
-import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestFastifyApplication>(AppModule, new FastifyAdapter(), {
     bufferLogs: true,
   });
 
-  const configService = app.get(ConfigService);
+  const config = app.get(AppConfigService);
 
+  app.setGlobalPrefix(config.globalPrefix);
   app.useGlobalPipes(new GlobalValidationPipe());
-  app.useGlobalFilters(new HttpExceptionFilter());
-  app.useGlobalInterceptors(new LoggingInterceptor(), new TransformInterceptor());
 
-  const frontendUrl = configService.get<string>('frontendUrl', 'http://localhost:3000');
+  // Request tracing on the Fastify request object (visible to guards/interceptors).
+  const fastify = app.getHttpAdapter().getInstance() as FastifyInstance;
+
+  // Tolerate empty JSON bodies (e.g. POST/DELETE with content-type json and no body).
+  app.useBodyParser('application/json', {}, (req, body, done) => {
+    try {
+      const raw = Buffer.isBuffer(body) ? body.toString('utf8') : String(body ?? '');
+      done(null, raw.trim() === '' ? {} : JSON.parse(raw));
+    } catch (err) {
+      done(err as Error, undefined);
+    }
+  });
+
+  fastify.addHook('onRequest', async (req, reply) => {
+    const header = req.headers['x-request-id'];
+    const requestId = (Array.isArray(header) ? header[0] : header) || randomUUID();
+    const corrHeader = req.headers['x-correlation-id'];
+    const correlationId = (Array.isArray(corrHeader) ? corrHeader[0] : corrHeader) || randomUUID();
+    (req as FastifyRequest & { requestId?: string }).requestId = requestId;
+    (req as FastifyRequest & { correlationId?: string }).correlationId = correlationId;
+    reply.header('X-Request-Id', requestId);
+    reply.header('X-Correlation-Id', correlationId);
+  });
+
   await app.register(cors, {
-    origin: frontendUrl,
+    origin: config.frontendUrl,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Tenant-ID'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'X-Request-ID',
+      'X-Correlation-ID',
+      'Idempotency-Key',
+    ],
   });
 
   await app.register(cookie, {
-    secret: configService.get<string>('jwt.secret') || 'fallback-dev-secret',
+    secret: config.jwtSecret || 'dev-cookie-secret',
   });
 
-  // Swagger configuration
-  const config = new DocumentBuilder()
-    .setTitle('PEB CRM API')
-    .setDescription('PEB CRM Backend API Documentation')
+  const swagger = new DocumentBuilder()
+    .setTitle('PEB SUPER-ADMIN Platform API')
+    .setDescription('Enterprise control plane API')
     .setVersion('1.0')
-    .addTag('lead', 'Lead management endpoints')
-    .addTag('auth', 'Authentication endpoints')
-    .addTag('health', 'Health check endpoints')
     .addBearerAuth()
+    .addTag('health', 'Health checks')
     .build();
 
-  const document = SwaggerModule.createDocument(app, config);
+  const document = SwaggerModule.createDocument(app, swagger);
   SwaggerModule.setup('api-docs', app, document);
 
-  const port = configService.get<number>('port', 8000);
-  await app.listen(port, '0.0.0.0');
+  await app.listen(config.port, '0.0.0.0');
+
+  console.log(`SUPER-ADMIN API running on http://localhost:${config.port}/${config.globalPrefix}`);
 }
 bootstrap();

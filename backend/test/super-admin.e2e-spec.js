@@ -33,11 +33,15 @@ async function req(method, path, opts = {}) {
   });
   const body = await res.text().catch(() => '');
   let parsed;
-  try { parsed = JSON.parse(body); } catch { parsed = body; }
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    parsed = body;
+  }
   return { status: res.status, headers: res.headers, body: parsed };
 }
 
-async function test(name, fn) {
+async function runTest(name, fn) {
   const start = Date.now();
   try {
     await fn();
@@ -67,45 +71,48 @@ async function main() {
 
   // ── 1. Health ────────────────────────────────────────
   console.log('\x1b[33m── Health Check ──\x1b[0m');
-  await test('GET /health returns 200', async () => {
+  await runTest('GET /health returns 200', async () => {
     const res = await req('GET', '/health');
     eq(res.status, 200);
   });
-  await test('GET /health/modules returns 200', async () => {
+  await runTest('GET /health/modules returns 200', async () => {
     const res = await req('GET', '/health/modules');
     eq(res.status, 200);
   });
 
   // ── 2. CORS Preflight ────────────────────────────────
   console.log('\n\x1b[33m── CORS Preflight ──\x1b[0m');
-  await test('OPTIONS /auth/login returns 204', async () => {
+  await runTest('OPTIONS /auth/login returns 204', async () => {
     const res = await req('OPTIONS', '/auth/login', { origin: ORIGIN });
     eq(res.status, 204);
   });
-  await test('OPTIONS response has CORS headers', async () => {
+  await runTest('OPTIONS response has CORS headers', async () => {
     const res = await req('OPTIONS', '/auth/login', { origin: ORIGIN });
     ok(res.headers.get('access-control-allow-origin') === ORIGIN, 'Missing allow-origin header');
   });
 
   // ── 3. Login Validation ─────────────────────────────
   console.log('\n\x1b[33m── Login Validation ──\x1b[0m');
-  await test('POST /auth/login with empty body returns 400', async () => {
+  await runTest('POST /auth/login with empty body returns 400', async () => {
     const res = await req('POST', '/auth/login', { json: {} });
     eq(res.status, 400);
   });
-  await test('POST /auth/login with wrong password returns 401', async () => {
+  await runTest('POST /auth/login with wrong password returns 401', async () => {
     const res = await req('POST', '/auth/login', { json: { email: EMAIL, password: 'wrong' } });
     eq(res.status, 401);
   });
 
   // ── 4. Successful Login ─────────────────────────────
   console.log('\n\x1b[33m── Login ──\x1b[0m');
-  await test('POST /auth/login with correct credentials succeeds', async () => {
+  await runTest('POST /auth/login with correct credentials succeeds', async () => {
     const res = await req('POST', '/auth/login', { json: { email: EMAIL, password: PASSWORD } });
     eq(res.status, 201, `Expected 201, got ${res.status}: ${JSON.stringify(res.body)}`);
     ok(res.body.success === true, 'response.success should be true');
     ok(res.body.data !== undefined, 'response.data should exist');
-    ok(typeof res.body.data.accessToken === 'string' && res.body.data.accessToken.length > 0, 'accessToken should be a non-empty string');
+    ok(
+      typeof res.body.data.accessToken === 'string' && res.body.data.accessToken.length > 0,
+      'accessToken should be a non-empty string',
+    );
     ok(res.body.data.user.email === EMAIL, `email should be ${EMAIL}`);
     eq(res.body.data.user.role, 'SUPER_ADMIN', 'role should be SUPER_ADMIN');
     authToken = res.body.data.accessToken;
@@ -113,11 +120,11 @@ async function main() {
 
   // ── 5. Auth Profile ────────────────────────────────
   console.log('\n\x1b[33m── Profile ──\x1b[0m');
-  await test('GET /auth/me without token returns 401', async () => {
+  await runTest('GET /auth/me without token returns 401', async () => {
     const res = await req('GET', '/auth/me');
     eq(res.status, 401);
   });
-  await test('GET /auth/me with valid token returns profile', async () => {
+  await runTest('GET /auth/me with valid token returns profile', async () => {
     const res = await req('GET', '/auth/me', { token: authToken });
     eq(res.status, 200);
     ok(res.body.data.email === EMAIL, `email should be ${EMAIL}`);
@@ -126,30 +133,30 @@ async function main() {
 
   // ── 6. Protected Routes ─────────────────────────────
   console.log('\n\x1b[33m── Protected Routes ──\x1b[0m');
-  await test('GET /users returns 200', async () => {
+  await runTest('GET /users returns 200', async () => {
     const res = await req('GET', '/users', { token: authToken });
     eq(res.status, 200);
   });
-  await test('GET /organization returns 200', async () => {
+  await runTest('GET /organization returns 200', async () => {
     const res = await req('GET', '/organization', { token: authToken });
     eq(res.status, 200);
   });
-  await test('GET /roles returns 200', async () => {
+  await runTest('GET /roles returns 200', async () => {
     const res = await req('GET', '/roles', { token: authToken });
     eq(res.status, 200);
   });
-  await test('GET /lead returns 200', async () => {
+  await runTest('GET /lead returns 200', async () => {
     const res = await req('GET', '/lead', { token: authToken });
     eq(res.status, 200);
   });
 
   // ── 7. Logout ───────────────────────────────────────
   console.log('\n\x1b[33m── Logout ──\x1b[0m');
-  await test('POST /auth/logout succeeds', async () => {
+  await runTest('POST /auth/logout succeeds', async () => {
     const res = await req('POST', '/auth/logout', { token: authToken });
     eq(res.status, 201);
   });
-  await test('Old token is invalid after logout', async () => {
+  await runTest('Old token is invalid after logout', async () => {
     const res = await req('GET', '/auth/me', { token: authToken });
     eq(res.status, 401);
   });
@@ -162,4 +169,7 @@ async function main() {
   process.exit(failed > 0 ? 1 : 0);
 }
 
-main().catch(err => { console.error('FATAL:', err); process.exit(1); });
+main().catch((err) => {
+  console.error('FATAL:', err);
+  process.exit(1);
+});

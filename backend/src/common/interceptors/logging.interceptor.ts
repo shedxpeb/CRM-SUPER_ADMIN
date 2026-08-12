@@ -10,26 +10,13 @@ export class LoggingInterceptor implements NestInterceptor {
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
     const request = context.switchToHttp().getRequest<FastifyRequest>();
     const { method, url } = request;
-    const requestId = request.requestId || 'unknown';
-    const now = Date.now();
+    const start = Date.now();
 
     return next.handle().pipe(
-      tap({
-        next: () => {
-          const response = context.switchToHttp().getResponse();
-          const statusCode = response.statusCode;
-          const delay = Date.now() - now;
-
-          this.logger.log(
-            `${method} ${url} - RequestId: ${requestId} - Status: ${statusCode} - ${delay}ms`,
-          );
-        },
-        error: (error) => {
-          const delay = Date.now() - now;
-          this.logger.error(
-            `${method} ${url} - RequestId: ${requestId} - Error: ${error.message} - ${delay}ms`,
-          );
-        },
+      tap(() => {
+        const duration = Date.now() - start;
+        const status = context.switchToHttp().getResponse()?.statusCode ?? 200;
+        this.logger.log(`${method} ${url} ${status} ${duration}ms`);
       }),
     );
   }

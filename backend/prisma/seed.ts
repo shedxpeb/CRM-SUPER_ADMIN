@@ -1,157 +1,144 @@
 import { PrismaClient } from '@prisma/client';
+import * as bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
 
-const cities = ['Ahmedabad', 'Surat', 'Rajkot', 'Vadodara', 'Bhavnagar', 'Jamnagar', 'Junagadh', 'Gandhinagar'];
-const companies = [
-  'Tata Steel', 'Reliance Industries', 'Adani Group', 'Larsen & Toubro', 'Mahindra & Mahindra',
-  'Godrej & Boyce', 'Kirloskar Group', 'ThyssenKrupp', 'Jindal Steel', 'Essar Steel',
-  'JSW Steel', 'Tata Motors', 'Maruti Suzuki', 'Hyundai Motors', 'Honda Cars',
-  'Toyota Kirloskar', 'Ford India', 'Volkswagen India', 'Skoda Auto', 'Audi India',
-  'Mercedes-Benz', 'BMW India', 'Porsche India', 'Ferrari India', 'Lamborghini India',
-  'Rolls-Royce', 'Bentley Motors', 'Aston Martin', 'McLaren Automotive', 'Bugatti Automobiles',
-  'Koenigsegg', 'Pagani Automobili', 'Rimac Automobili', 'Pininfarina', 'Italdesign',
-  'Bertone', 'Zagato', 'Giorgetto Giugiaro', 'Marcello Gandini', 'Nuccio Bertone'
+const PERMISSION_CATALOG: { key: string; module: string; label: string; category: string }[] = [
+  // Tenants (Organization permissions)
+  { key: 'organization:read', module: 'tenants', label: 'View tenants', category: 'tenants' },
+  { key: 'organization:create', module: 'tenants', label: 'Create tenants', category: 'tenants' },
+  { key: 'organization:update', module: 'tenants', label: 'Update tenants', category: 'tenants' },
+  { key: 'organization:suspend', module: 'tenants', label: 'Suspend tenants', category: 'tenants' },
+  { key: 'organization:restore', module: 'tenants', label: 'Restore tenants', category: 'tenants' },
+  { key: 'organization:delete', module: 'tenants', label: 'Delete tenants', category: 'tenants' },
+  { key: 'organization:impersonate', module: 'tenants', label: 'Impersonate tenants', category: 'tenants' },
+  // Users & RBAC
+  { key: 'users:read', module: 'users', label: 'View platform users', category: 'rbac' },
+  { key: 'users:manage', module: 'users', label: 'Manage platform users', category: 'rbac' },
+  { key: 'roles:read', module: 'roles', label: 'View roles', category: 'rbac' },
+  { key: 'roles:manage', module: 'roles', label: 'Manage roles', category: 'rbac' },
+  { key: 'permissions:read', module: 'permissions', label: 'View permissions', category: 'rbac' },
+  { key: 'permissions:manage', module: 'permissions', label: 'Manage permissions', category: 'rbac' },
+  // CRM Module Access
+  { key: 'modules:manage', module: 'modules', label: 'Manage tenant modules', category: 'tenants' },
+  // Monitoring
+  { key: 'monitoring:read', module: 'monitoring', label: 'View monitoring', category: 'monitoring' },
+  { key: 'health:read', module: 'monitoring', label: 'View health', category: 'monitoring' },
+  { key: 'errors:read', module: 'monitoring', label: 'View errors', category: 'monitoring' },
+  { key: 'errors:resolve', module: 'monitoring', label: 'Resolve errors', category: 'monitoring' },
+  { key: 'audit:read', module: 'audit', label: 'View audit logs', category: 'security' },
+  { key: 'logs:read', module: 'monitoring', label: 'View logs', category: 'security' },
+  // Security
+  { key: 'security:read', module: 'security', label: 'View security', category: 'security' },
+  { key: 'security:manage', module: 'security', label: 'Manage security', category: 'security' },
+  // Settings
+  { key: 'settings:read', module: 'settings', label: 'View settings', category: 'settings' },
+  { key: 'settings:manage', module: 'settings', label: 'Manage settings', category: 'settings' },
 ];
 
-const projectTitles = [
-  'Industrial Warehouse', 'Manufacturing Plant', 'Distribution Center', 'Factory Building',
-  'Commercial Office', 'Retail Store', 'Shopping Mall', 'Showroom',
-  'Residential Complex', 'Apartment Building', 'Villa Project', 'Township',
-  'Institutional Building', 'School Building', 'Hospital Complex', 'Research Center'
-];
-
-const firstNames = ['Rajesh', 'Amit', 'Vikram', 'Suresh', 'Rahul', 'Arun', 'Deepak', 'Sanjay', 'Vijay', 'Anil'];
-const lastNames = ['Patel', 'Shah', 'Mehta', 'Jain', 'Agarwal', 'Singh', 'Kumar', 'Gupta', 'Sharma', 'Verma'];
-
-function randomItem<T>(array: T[]): T {
-  return array[Math.floor(Math.random() * array.length)];
-}
-
-function randomDate(start: Date, end: Date): Date {
-  return new Date(start.getTime() + Math.random() * (end.getTime() - start.getTime()));
-}
-
-function generateMobile(): string {
-  const prefix = ['98', '99', '97', '94', '91', '93', '92', '89'][Math.floor(Math.random() * 8)];
-  const middle = Math.floor(Math.random() * 100000000).toString().padStart(8, '0');
-  return `${prefix}${middle}`;
-}
-
-function generateEmail(name: string, company: string): string {
-  const cleanName = name.toLowerCase().replace(/\s/g, '.');
-  const cleanCompany = company.toLowerCase().replace(/\s/g, '').replace(/[^a-z0-9]/g, '');
-  return `${cleanName}@${cleanCompany}.com`;
-}
+const ROLE_PERMISSIONS: Record<string, string[]> = {
+  SUPER_ADMIN: ['*', ...PERMISSION_CATALOG.map((p) => p.key)],
+  PLATFORM_OPERATOR: [
+    'organization:read', 'organization:create', 'organization:update', 'organization:suspend', 'organization:restore',
+    'users:read', 'roles:read', 'permissions:read', 'modules:manage',
+    'monitoring:read', 'health:read', 'errors:read', 'errors:resolve', 'logs:read', 'audit:read',
+    'settings:read', 'settings:manage',
+  ],
+  SUPPORT_ENGINEER: [
+    'organization:read', 'organization:impersonate', 'users:read', 'monitoring:read', 'health:read',
+    'audit:read', 'logs:read', 'settings:read',
+  ],
+  PLATFORM_AUDITOR: [
+    'audit:read', 'logs:read', 'monitoring:read', 'health:read', 'security:read', 'errors:read',
+  ],
+};
 
 async function main() {
-  // Get count from command line argument or default to 50
-  const countArg = process.argv[2];
-  const count = countArg ? parseInt(countArg, 10) : 50;
+  const bcryptRounds = parseInt(process.env.SECURITY_BCRYPT_ROUNDS || process.env.BCRYPT_ROUNDS || '12', 10);
 
-  // Validate count
-  const validCounts = [50, 100, 500, 1000, 5000];
-  if (!validCounts.includes(count)) {
-    console.error(`Invalid count: ${count}. Valid options: ${validCounts.join(', ')}`);
-    console.log('Usage: npm run seed [count]');
-    console.log('Example: npm run seed 100');
-    process.exit(1);
+  // 1. Permission catalog
+  for (const p of PERMISSION_CATALOG) {
+    await prisma.permission.upsert({
+      where: { key: p.key },
+      update: { module: p.module, label: p.label, category: p.category },
+      create: p,
+    });
   }
 
-  console.log(`Starting seed with ${count} records...`);
-
-  // Delete existing leads
-  await prisma.lead.deleteMany();
-  console.log('Deleted existing leads');
-
-  const statuses = ['New', 'Contacted', 'DesignPending', 'BOQPending', 'EstimateSent', 'ProposalSent', 'Negotiation', 'Approved', 'Rejected', 'Converted'];
-  const priorities = ['Low', 'Medium', 'High', 'Urgent'];
-  const sources = ['Website', 'Referral', 'ColdCall', 'Email', 'SocialMedia', 'TradeShow', 'Advertisement', 'Other'];
-  const projectTypes = ['Factory', 'Warehouse', 'IndustrialShed', 'Commercial', 'Residential', 'Other'];
-  const structureTypes = ['PEB', 'SteelStructure', 'Hybrid', 'Other'];
-
-  const leads: any[] = [];
-
-  for (let i = 0; i < count; i++) {
-    const firstName = randomItem(firstNames);
-    const lastName = randomItem(lastNames);
-    const customerName = `${firstName} ${lastName}`;
-    const companyName = randomItem(companies);
-    const city = randomItem(cities);
-    const projectTitle = randomItem(projectTitles);
-
-    const createdAt = randomDate(new Date('2024-01-01'), new Date('2024-12-31'));
-    const lastFollowUp = randomDate(createdAt, new Date('2024-12-31'));
-    const nextFollowUpDate = randomDate(new Date(), new Date('2025-06-30'));
-
-    const status = randomItem(statuses);
-    const isConverted = status === 'Converted' || (status === 'Approved' && Math.random() > 0.5);
-
-    const lead = {
-      customerName,
-      companyName,
-      mobile: generateMobile(),
-      email: generateEmail(customerName, companyName),
-      city,
-      projectTitle,
-      projectType: randomItem(projectTypes),
-      structureType: randomItem(structureTypes),
-      source: randomItem(sources),
-      priority: randomItem(priorities),
-      status,
-      createdById: 'system-user', // Will be replaced with real user ID after authentication
-      assignedToId: Math.random() > 0.3 ? 'sales-user-1' : null,
-      remarks: Math.random() > 0.5 ? 'Initial inquiry received. Follow-up scheduled.' : null,
-      isConverted,
-      createdAt,
-      updatedAt: randomDate(createdAt, new Date('2024-12-31')),
-      lastFollowUp: Math.random() > 0.3 ? lastFollowUp : null,
-      nextFollowUpDate: Math.random() > 0.4 ? nextFollowUpDate : null,
-    };
-
-    leads.push(lead);
+  // 2. System roles + role-permission grants
+  for (const [roleName, keys] of Object.entries(ROLE_PERMISSIONS)) {
+    const role = await prisma.platformRole.upsert({
+      where: { name: roleName },
+      update: { isSystem: true, isActive: true },
+      create: { name: roleName, isSystem: true, isActive: true },
+    });
+    for (const key of keys) {
+      const permission = await prisma.permission.findUnique({ where: { key } });
+      if (!permission) continue;
+      await prisma.rolePermission.upsert({
+        where: { roleId_permissionId: { roleId: role.id, permissionId: permission.id } },
+        update: {},
+        create: { roleId: role.id, permissionId: permission.id },
+      });
+    }
   }
 
-  // Insert leads in batches
-  await prisma.lead.createMany({
-    data: leads,
-  });
+  // 3. Super admin user
+  const email = (process.env.SUPER_ADMIN_EMAIL || 'admin@pebplatform.io').toLowerCase();
+  const password = process.env.SUPER_ADMIN_PASSWORD || 'Admin@12345';
+  const passwordHash = await bcrypt.hash(password, bcryptRounds);
 
-  console.log(`Seeded ${leads.length} leads`);
+  const superRole = await prisma.platformRole.findUnique({ where: { name: 'SUPER_ADMIN' } });
 
-  // Print summary
-  const total = await prisma.lead.count();
-  const byStatus = await prisma.lead.groupBy({
-    by: ['status'],
-    _count: true,
+  // Always update password hash to ensure it matches current bcrypt settings
+  const admin = await prisma.platformUser.upsert({
+    where: { email },
+    update: {
+      isActive: true,
+      isLocked: false,
+      passwordHash,
+      loginAttempts: 0,
+      lockedUntil: null,
+    },
+    create: {
+      email,
+      name: 'Platform Super Admin',
+      passwordHash,
+      isActive: true,
+      mustChangePassword: true,
+    },
   });
-  const byPriority = await prisma.lead.groupBy({
-    by: ['priority'],
-    _count: true,
-  });
-  const byCity = await prisma.lead.groupBy({
-    by: ['city'],
-    _count: true,
-  });
+  if (superRole) {
+    await prisma.platformUserRole.upsert({
+      where: { userId_roleId: { userId: admin.id, roleId: superRole.id } },
+      update: {},
+      create: { userId: admin.id, roleId: superRole.id },
+    });
+  }
 
-  console.log('\n=== Seed Summary ===');
-  console.log(`Total leads: ${total}`);
-  console.log('\nBy Status:');
-  byStatus.forEach(item => {
-    console.log(`  ${item.status}: ${item._count}`);
-  });
-  console.log('\nBy Priority:');
-  byPriority.forEach(item => {
-    console.log(`  ${item.priority}: ${item._count}`);
-  });
-  console.log('\nBy City:');
-  byCity.forEach(item => {
-    console.log(`  ${item.city}: ${item._count}`);
-  });
+  // 4. Default platform settings
+  const settings: { key: string; value: string; type: 'STRING' | 'NUMBER' | 'BOOLEAN' | 'JSON'; category: string }[] = [
+    { key: 'platform.name', value: JSON.stringify('PEB SUPER-ADMIN'), type: 'STRING', category: 'general' },
+    { key: 'platform.supportEmail', value: JSON.stringify('support@pebplatform.io'), type: 'STRING', category: 'general' },
+    { key: 'security.mfaRequired', value: JSON.stringify(false), type: 'BOOLEAN', category: 'security' },
+    { key: 'security.passwordExpiryDays', value: JSON.stringify(90), type: 'NUMBER', category: 'security' },
+    { key: 'maintenance.mode', value: JSON.stringify(false), type: 'BOOLEAN', category: 'general' },
+  ];
+  for (const s of settings) {
+    await prisma.platformSetting.upsert({
+      where: { key: s.key },
+      update: { value: JSON.parse(s.value), type: s.type, category: s.category },
+      create: { key: s.key, value: JSON.parse(s.value), type: s.type, category: s.category },
+    });
+  }
+
+  // eslint-disable-next-line no-console
+  console.log(`Seed complete. Super admin: ${email}`);
 }
 
 main()
   .catch((e) => {
+    // eslint-disable-next-line no-console
     console.error(e);
     process.exit(1);
   })

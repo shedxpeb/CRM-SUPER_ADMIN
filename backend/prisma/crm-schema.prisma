@@ -1,0 +1,193 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/@prisma/client-crm"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("CRM_DATABASE_URL")
+}
+
+// CRM MODELS (from ADMIN-CRM database - multi-tenant via organizationId)
+// The control plane (Super Admin) is the single source of truth for
+// users, roles, permissions and module toggles. These models mirror the
+// ADMIN-CRM tables so the platform can read/write them cross-DB.
+
+model User {
+  id                  String    @id @default(uuid())
+  email               String    @unique
+  password            String
+  isActive            Boolean   @default(false)
+  isVerified          Boolean   @default(false)
+  role                String    @default("EMPLOYEE")
+  organizationType    String    @default("COMPANY")
+  otp                 String?
+  otpExpiry           DateTime?
+  otpAttempts         Int       @default(0)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  avatar              String?
+  department          String?
+  designation         String?
+  failedLoginAttempts Int       @default(0)
+  isLocked            Boolean   @default(false)
+  lastLogin           DateTime?
+  lockedUntil         DateTime?
+  mobile              String?
+  name                String?
+  organizationId      String?
+  passwordHistory     Json?
+  passwordVersion     Int       @default(1)
+  version             Int       @default(1)
+  isDeleted           Boolean   @default(false)
+  deletedAt           DateTime?
+  deletedById         String?
+
+  @@index([organizationId])
+  @@index([organizationId, role])
+  @@index([isDeleted])
+  @@index([isActive])
+}
+
+model Role {
+  id             String   @id @default(uuid())
+  organizationId String
+  name           String
+  code           String
+  description    String?
+  permissions    String[]
+  isSystem       Boolean  @default(false)
+  createdById    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  version        Int      @default(1)
+  isDeleted      Boolean  @default(false)
+  deletedAt      DateTime?
+  deletedById    String?
+
+  @@unique([organizationId, name])
+  @@unique([organizationId, code])
+  @@index([organizationId])
+  @@index([isDeleted])
+}
+
+model Permission {
+  id             String   @id @default(uuid())
+  organizationId String?
+  key            String
+  module         String
+  label          String
+  description    String?
+  category       String   @default("general")
+  isSystem       Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([organizationId, key])
+  @@index([module])
+  @@index([organizationId])
+}
+
+model UserRole {
+  id             String   @id @default(uuid())
+  userId         String
+  roleId         String
+  organizationId String
+  assignedById   String?
+  assignedAt     DateTime @default(now())
+
+  @@unique([userId, roleId, organizationId])
+  @@index([userId])
+  @@index([roleId])
+  @@index([organizationId])
+}
+
+model Session {
+  id             String    @id @default(uuid())
+  userId         String
+  organizationId String?
+  token          String    @unique
+  refreshToken   String?
+  device         String?
+  browser        String?
+  os             String?
+  ipAddress      String?
+  userAgent      String?
+  loginAt        DateTime  @default(now())
+  lastActivity   DateTime  @default(now())
+  expiresAt      DateTime
+  idleExpiresAt  DateTime
+  isRevoked      Boolean   @default(false)
+  revokedAt      DateTime?
+  isRememberMe   Boolean   @default(false)
+
+  @@index([userId])
+  @@index([token])
+  @@index([userId, isRevoked])
+  @@index([expiresAt])
+  @@index([organizationId])
+}
+
+model RefreshToken {
+  id                  String    @id @default(uuid())
+  tokenHash           String    @unique
+  sessionId           String
+  userId              String
+  organizationId      String?
+  expiresAt           DateTime
+  isRevoked           Boolean   @default(false)
+  revokedAt           DateTime?
+  replacedByTokenHash String?
+
+  @@index([tokenHash])
+  @@index([sessionId])
+  @@index([userId])
+  @@index([organizationId])
+}
+
+model LoginAttempt {
+  id             String    @id @default(uuid())
+  email          String
+  organizationId String?
+  ipAddress      String?
+  userAgent      String?
+  success        Boolean
+  failureReason  String?
+  lockedUntil    DateTime?
+  createdAt      DateTime  @default(now())
+
+  @@index([email])
+  @@index([createdAt])
+  @@index([email, createdAt])
+  @@index([organizationId])
+}
+
+model OrganizationModule {
+  id             String    @id @default(uuid())
+  organizationId String
+  moduleKey      String
+  enabled        Boolean   @default(true)
+  configuredById String?
+  enabledAt      DateTime?
+  disabledAt     DateTime?
+  settings       Json?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([organizationId, moduleKey])
+  @@index([organizationId])
+  @@index([moduleKey])
+}
+
+model SystemSettings {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  value     Json
+  type      String   @default("STRING")
+  category  String   @default("general")
+  isSecret  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([category])
+}

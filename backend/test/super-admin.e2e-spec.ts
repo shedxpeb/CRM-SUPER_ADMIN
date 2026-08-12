@@ -43,14 +43,14 @@ describe('Super Admin E2E', () => {
     app.useGlobalInterceptors(new LoggingInterceptor(), new TransformInterceptor());
 
     const frontendUrl = configService.get<string>('frontendUrl', FRONTEND_URL);
-    await app.register(cors as any, {
+    await app.register(cors as unknown as Parameters<typeof app.register>[0], {
       origin: frontendUrl,
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
       allowedHeaders: ['Content-Type', 'Authorization', 'X-Tenant-ID'],
     });
 
-    await app.register(cookie as any, {
+    await app.register(cookie as unknown as Parameters<typeof app.register>[0], {
       secret: configService.get<string>('jwt.secret') || 'test-secret',
     });
 
@@ -61,7 +61,7 @@ describe('Super Admin E2E', () => {
     await app.close();
   });
 
-  const inject = (method: string, url: string, opts: any = {}) =>
+  const inject = (method: string, url: string, opts: Record<string, unknown> = {}) =>
     fastifyInstance.inject({ method, url, ...opts });
 
   // ── 1. HEALTH ────────────────────────────────────────────

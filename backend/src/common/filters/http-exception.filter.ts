@@ -8,71 +8,83 @@ import {
 } from '@nestjs/common';
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { ServerResponse } from 'http';
+import { ErrorCodes } from '../constants/error-codes.constants';
 
-@Catch()
+/**
+ * Global exception filter producing the standard error body:
+ * { code, message, details?, requestId, path, timestamp }
+ * 400 validation | 401 | 403 RBAC | 404 | 409 conflict/optimistic lock |
+ * 422 domain rule | 429 rate limit | 500
+ */
+@Catch(HttpException)
 export class HttpExceptionFilter implements ExceptionFilter {
   private readonly logger = new Logger(HttpExceptionFilter.name);
 
-  catch(exception: unknown, host: ArgumentsHost) {
+  catch(exception: HttpException, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
     const res = ctx.getResponse<FastifyReply | ServerResponse>();
-    const req = ctx.getRequest<FastifyRequest>();
+    const req = ctx.getRequest<FastifyRequest & { requestId?: string }>();
+    const status = exception.getStatus();
+    const requestId = req.requestId || 'unknown';
+    const response = exception.getResponse();
 
-    const status =
-      exception instanceof HttpException ? exception.getStatus() : HttpStatus.INTERNAL_SERVER_ERROR;
+    let code: string = ErrorCodes.INTERNAL_ERROR;
+    let message = exception.message;
+    let details: unknown;
 
-    let message =
-      exception instanceof HttpException ? exception.message : 'Internal server error';
-
-    const requestId = (req as any).requestId || 'unknown';
-
-    if (exception instanceof HttpException) {
-      const exceptionResponse = exception.getResponse();
-      if (typeof exceptionResponse === 'object' && exceptionResponse !== null) {
-        const responseObj = exceptionResponse as any;
-        if (responseObj.message && Array.isArray(responseObj.message)) {
-          this.logger.error(
-            `${req.method} ${req.url} - RequestId: ${requestId} - Status: ${status} - Validation Errors: ${JSON.stringify(responseObj.message)}`,
-          );
-          message = responseObj.message.join(', ');
-        } else if (responseObj.message) {
-          this.logger.error(
-            `${req.method} ${req.url} - RequestId: ${requestId} - Status: ${status} - Error Details: ${JSON.stringify(responseObj)}`,
-          );
-        }
+    if (typeof response === 'string') {
+      message = response;
+    } else if (typeof response === 'object' && response !== null) {
+      const obj = response as Record<string, unknown>;
+      code = (obj.code as string) || this.mapStatusToCode(status);
+      if (Array.isArray(obj.message)) {
+        details = obj.message;
+        message = (obj.message as string[]).join(', ');
+      } else if (obj.message) {
+        message = String(obj.message);
       }
+      if (obj.details) details = obj.details;
     }
 
-    this.logger.error(
-      `${req.method} ${req.url} - RequestId: ${requestId} - Status: ${status} - Message: ${message}`,
-    );
+    this.logger.error(`${req.method} ${req.url} [${status}] ${code} - ${message} (${requestId})`);
 
-    if (exception instanceof Error) {
-      this.logger.error(`STACK: ${exception.stack}`);
-      this.logger.error(`NAME: ${exception.name}`);
-      this.logger.error(`FULL: ${JSON.stringify(exception, Object.getOwnPropertyNames(exception))}`);
-    }
-
-    const body: Record<string, any> = {
-      statusCode: status,
-      timestamp: new Date().toISOString(),
-      path: req.url,
-      requestId,
+    const body = {
+      code,
       message,
+      details,
+      requestId,
+      path: req.url,
+      timestamp: new Date().toISOString(),
     };
 
-    if (exception instanceof Error) {
-      body.errorName = exception.name;
-      body.errorStack = exception.stack?.split('\n').slice(0, 6).join('\\n');
-    }
-
-    if ('code' in res && typeof res.code === 'function') {
+    if (typeof res !== 'undefined' && typeof (res as FastifyReply).code === 'function') {
       (res as FastifyReply).code(status).send(body);
     } else {
       const raw = res as ServerResponse;
       raw.statusCode = status;
       raw.setHeader('Content-Type', 'application/json');
       raw.end(JSON.stringify(body));
+    }
+  }
+
+  private mapStatusToCode(status: number): string {
+    switch (status) {
+      case HttpStatus.BAD_REQUEST:
+        return ErrorCodes.VALIDATION_FAILED;
+      case HttpStatus.UNAUTHORIZED:
+        return ErrorCodes.UNAUTHORIZED;
+      case HttpStatus.FORBIDDEN:
+        return ErrorCodes.FORBIDDEN;
+      case HttpStatus.NOT_FOUND:
+        return ErrorCodes.NOT_FOUND;
+      case HttpStatus.CONFLICT:
+        return ErrorCodes.CONFLICT;
+      case HttpStatus.UNPROCESSABLE_ENTITY:
+        return ErrorCodes.DOMAIN_RULE_VIOLATION;
+      case HttpStatus.TOO_MANY_REQUESTS:
+        return ErrorCodes.RATE_LIMITED;
+      default:
+        return ErrorCodes.INTERNAL_ERROR;
     }
   }
 }
