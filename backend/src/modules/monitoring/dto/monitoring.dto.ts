@@ -24,6 +24,10 @@ export class ListAuditLogsDto extends PaginationDto {
   targetId?: string;
 
   @IsOptional()
+  @IsString()
+  tenantId?: string;
+
+  @IsOptional()
   @IsEnum(AuditSeverity)
   severity?: AuditSeverity;
 }

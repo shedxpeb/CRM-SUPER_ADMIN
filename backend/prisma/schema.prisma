@@ -294,6 +294,9 @@ model Tenant {
   maxRoleDepth        Int          @default(5) // Maximum hierarchy depth
   customPermissionsEnabled Boolean @default(false)
   syncState           SyncState    @default(PENDING)
+  lastSyncedAt        DateTime?    // Last successful sync timestamp
+  syncError           String?      // Last sync error message
+  syncVersion         Int          @default(0) // Sync version for conflict detection
   notes               String?
 
   createdById String?
@@ -313,6 +316,8 @@ model Tenant {
   @@index([isDeleted])
   @@index([createdAt])
   @@index([crmOrganizationId])
+  @@index([syncState])
+  @@index([lastSyncedAt])
   @@map("tenants")
 }
 

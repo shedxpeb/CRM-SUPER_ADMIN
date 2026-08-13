@@ -70,6 +70,13 @@ export class UsersController {
     return this.usersService.unsuspend(id, { id: actor.id, email: actor.email });
   }
 
+  @Post(':id/unlock')
+  @RequirePermissions('users:manage')
+  @ApiOperation({ summary: 'Unlock a platform user account' })
+  unlock(@Param('id') id: string, @CurrentUser() actor: CurrentUser) {
+    return this.usersService.unlock(id, { id: actor.id, email: actor.email });
+  }
+
   @Post(':id/reset-password')
   @RequirePermissions('users:manage')
   @ApiOperation({ summary: 'Reset a platform user password' })

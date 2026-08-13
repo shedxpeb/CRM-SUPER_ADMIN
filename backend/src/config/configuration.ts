@@ -1,7 +1,7 @@
 export default () => ({
   nodeEnv: process.env.NODE_ENV || 'development',
   isProduction: process.env.NODE_ENV === 'production',
-  port: parseInt(process.env.PORT || '8101', 10),
+  port: parseInt(process.env.PORT || '8001', 10),
   globalPrefix: process.env.API_PREFIX || 'api/v1',
   frontendUrl: process.env.FRONTEND_URL || 'http://localhost:3001',
   database: {

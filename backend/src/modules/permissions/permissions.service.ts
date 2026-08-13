@@ -7,6 +7,49 @@ import { resolvePage, buildPageMeta } from '../../shared/helpers/pagination.help
 export class PermissionsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  /**
+   * Validate that there are no orphan permissions (permissions not assigned to any role)
+   * This can be called periodically or before certain operations
+   */
+  async validateNoOrphanPermissions() {
+    const orphanPermissions = await this.prisma.permission.findMany({
+      where: {
+        roles: {
+          none: {},
+        },
+      },
+      select: { id: true, key: true, module: true },
+    });
+
+    if (orphanPermissions.length > 0) {
+      // Log orphans but don't throw - they might be intentional for future use
+      console.warn(`Found ${orphanPermissions.length} orphan permissions:`, orphanPermissions.map(p => p.key));
+    }
+
+    return { count: orphanPermissions.length, permissions: orphanPermissions };
+  }
+
+  /**
+   * Validate that there are no orphan roles (roles with no users)
+   */
+  async validateNoOrphanRoles() {
+    const orphanRoles = await this.prisma.platformRole.findMany({
+      where: {
+        isDeleted: false,
+        users: {
+          none: {},
+        },
+      },
+      select: { id: true, name: true },
+    });
+
+    if (orphanRoles.length > 0) {
+      console.warn(`Found ${orphanRoles.length} orphan roles:`, orphanRoles.map(r => r.name));
+    }
+
+    return { count: orphanRoles.length, roles: orphanRoles };
+  }
+
   async findAll(dto: ListPermissionsDto) {
     const { page, skip, take } = resolvePage(dto);
 

@@ -2,9 +2,9 @@ import { PaginationDto } from '../../common/dto/pagination.dto';
 import { PaginationDefaults } from '../../common/constants/pagination.constants';
 
 export function resolvePage(dto: PaginationDto): { page: number; skip: number; take: number } {
-  const page = dto.page || PaginationDefaults.page;
+  const page = Number(dto.page) || PaginationDefaults.page;
   const pageSize = Math.min(
-    dto.pageSize || PaginationDefaults.pageSize,
+    Number(dto.pageSize) || PaginationDefaults.pageSize,
     PaginationDefaults.maxPageSize,
   );
   return { page, skip: (page - 1) * pageSize, take: pageSize };

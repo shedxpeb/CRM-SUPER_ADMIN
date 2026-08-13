@@ -7,6 +7,7 @@ export interface RoleResponseDto {
   createdAt: Date;
   updatedAt: Date;
   userCount: number;
+  permissionCount: number;
   permissions: { id: string; key: string }[];
 }
 

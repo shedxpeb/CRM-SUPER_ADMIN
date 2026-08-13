@@ -14,7 +14,7 @@ export class AppConfigService {
   }
 
   get port(): number {
-    return this.configService.get<number>('port', 8101);
+    return this.configService.get<number>('port', 8001);
   }
 
   get globalPrefix(): string {

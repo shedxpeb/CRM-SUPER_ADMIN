@@ -48,7 +48,7 @@ export class RolesService {
           isActive: true,
           createdAt: true,
           updatedAt: true,
-          _count: { select: { users: true } },
+          _count: { select: { users: true, permissions: true } },
         },
       }),
       this.prisma.platformRole.count({ where }),
@@ -72,7 +72,7 @@ export class RolesService {
         isDeleted: true,
         createdAt: true,
         updatedAt: true,
-        _count: { select: { users: true } },
+        _count: { select: { users: true, permissions: true } },
         permissions: {
           select: { permission: { select: { id: true, key: true } } },
           orderBy: { permission: { key: 'asc' } },
@@ -167,9 +167,30 @@ export class RolesService {
       );
     }
 
-    await this.prisma.platformRole.update({
-      where: { id },
-      data: { isDeleted: true, deletedAt: new Date(), deletedById: actor.id, isActive: false },
+    // Validation: Check for orphan permissions that would result from deletion
+    const permissionCount = await this.prisma.rolePermission.count({ where: { roleId: id } });
+    if (permissionCount > 0) {
+      // Permissions will be cascade deleted via DB, but we should log this
+      await this.auditService.record({
+        actorId: actor.id,
+        actorEmail: actor.email,
+        action: 'roles.permissions_cascade_delete',
+        targetType: 'PlatformRole',
+        targetId: id,
+        targetName: role.name,
+        metadata: { permissionCount },
+      });
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      // Delete role-permission associations (cascade)
+      await tx.rolePermission.deleteMany({ where: { roleId: id } });
+
+      // Soft delete the role
+      await tx.platformRole.update({
+        where: { id },
+        data: { isDeleted: true, deletedAt: new Date(), deletedById: actor.id, isActive: false },
+      });
     });
 
     await this.auditService.record({
@@ -271,7 +292,7 @@ export class RolesService {
         isActive: true,
         createdAt: true,
         updatedAt: true,
-        _count: { select: { users: true } },
+        _count: { select: { users: true, permissions: true } },
         permissions: {
           select: { permission: { select: { id: true, key: true } } },
           orderBy: { permission: { key: 'asc' } },
@@ -302,7 +323,7 @@ export class RolesService {
     isActive: boolean;
     createdAt: Date;
     updatedAt: Date;
-    _count: { users: number };
+    _count: { users: number; permissions: number };
   }): RoleResponseDto {
     return {
       id: role.id,
@@ -313,6 +334,7 @@ export class RolesService {
       createdAt: role.createdAt,
       updatedAt: role.updatedAt,
       userCount: role._count.users,
+      permissionCount: role._count.permissions,
       permissions: [],
     };
   }
@@ -325,7 +347,7 @@ export class RolesService {
     isActive: boolean;
     createdAt: Date;
     updatedAt: Date;
-    _count: { users: number };
+    _count: { users: number; permissions: number };
     permissions: { permission: { id: string; key: string } }[];
   }): RoleResponseDto {
     return {
@@ -337,6 +359,7 @@ export class RolesService {
       createdAt: role.createdAt,
       updatedAt: role.updatedAt,
       userCount: role._count.users,
+      permissionCount: role._count.permissions,
       permissions: role.permissions.map((p) => ({ id: p.permission.id, key: p.permission.key })),
     };
   }

@@ -27,6 +27,7 @@ const USER_SELECT = {
   createdAt: true,
   updatedAt: true,
   roles: { select: { role: { select: { id: true, name: true } } } },
+  _count: { select: { sessions: { where: { isActive: true } } } },
 } as const;
 
 @Injectable()
@@ -36,6 +37,14 @@ export class UsersService {
     private readonly config: AppConfigService,
     private readonly auditService: AuditService,
   ) {}
+
+  /**
+   * NOTE: Platform Users and CRM Users are SEPARATE entities.
+   * - Platform Users: Super Admins who manage the platform (stored in platform_users table)
+   * - CRM Users: Tenant-specific users who use the CRM application (stored in CRM DB User table)
+   * These are NOT synchronized and should remain isolated.
+   * CRM Users are managed via TenantOpsService using crmPrisma.
+   */
 
   async create(dto: CreateUserDto, actor: { id: string; email: string }) {
     const email = dto.email.toLowerCase();
@@ -280,6 +289,33 @@ export class UsersService {
     return { success: true, message: 'User unsuspended', user: this.mapUser(updated) };
   }
 
+  async unlock(id: string, actor: { id: string; email: string }) {
+    const user = await this.prisma.platformUser.findUnique({ where: { id } });
+    if (!user || user.isDeleted) throw new NotFoundException('User not found');
+
+    const updated = await this.prisma.platformUser.update({
+      where: { id },
+      data: {
+        isLocked: false,
+        lockedUntil: null,
+        loginAttempts: 0,
+        updatedById: actor.id,
+      },
+      select: USER_SELECT,
+    });
+
+    await this.auditService.record({
+      actorId: actor.id,
+      actorEmail: actor.email,
+      action: 'users.unlock',
+      targetType: 'PlatformUser',
+      targetId: id,
+      targetName: updated.name,
+    });
+
+    return { success: true, message: 'User unlocked', user: this.mapUser(updated) };
+  }
+
   async resetPassword(id: string, newPassword: string, actor: { id: string; email: string }) {
     const user = await this.prisma.platformUser.findUnique({ where: { id } });
     if (!user || user.isDeleted) throw new NotFoundException('User not found');
@@ -428,6 +464,7 @@ export class UsersService {
     createdAt: Date;
     updatedAt: Date;
     roles: { role: { id: string; name: string } }[];
+    _count: { sessions: number };
   }): UserResponseDto {
     return {
       id: user.id,
@@ -438,6 +475,7 @@ export class UsersService {
       isLocked: user.isLocked,
       department: user.department,
       designation: user.designation,
+      activeSessions: user._count.sessions,
       roles: user.roles.map((r) => ({ id: r.role.id, name: r.role.name })),
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,

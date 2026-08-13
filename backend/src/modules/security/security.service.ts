@@ -21,7 +21,8 @@ export class SecurityService {
   async listBlockedIps(dto: ListBlockedIpsDto) {
     const { page, skip, take } = resolvePage(dto);
     const where: Record<string, unknown> = {};
-    if (dto.active !== undefined) where.isActive = dto.active;
+    const isActive = dto.active === true;
+    if (dto.active !== undefined) where.isActive = isActive;
 
     const [items, total] = await Promise.all([
       this.prisma.blockedIp.findMany({
@@ -95,7 +96,8 @@ export class SecurityService {
   async listSessions(dto: ListSessionsDto) {
     const { page, skip, take } = resolvePage(dto);
     const where: Record<string, unknown> = {};
-    if (dto.active !== undefined) where.isActive = dto.active;
+    const isActive = dto.active === true;
+    if (dto.active !== undefined) where.isActive = isActive;
     if (dto.userId) where.userId = dto.userId;
 
     const [items, total] = await Promise.all([
@@ -155,7 +157,8 @@ export class SecurityService {
     const where: Record<string, unknown> = {};
     if (dto.userId) where.userId = dto.userId;
     if (dto.email) where.email = { contains: dto.email, mode: 'insensitive' };
-    if (dto.success !== undefined) where.success = dto.success;
+    const success = dto.success === true;
+    if (dto.success !== undefined) where.success = success;
 
     const [items, total] = await Promise.all([
       this.prisma.loginAttempt.findMany({

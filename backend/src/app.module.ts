@@ -4,7 +4,6 @@ import { JwtModule, JwtModuleOptions } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ConfigModule as AppConfigModule } from './config/config.module';
 import { DatabaseModule } from './database/database.module';
-import { CrmPrismaService } from './database/crm-prisma.service';
 import { HealthModule } from './health/health.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { PermissionsGuard } from './common/guards/permissions.guard';
@@ -53,7 +52,6 @@ import { PlatformModule } from './modules/platform/platform.module';
     PlatformModule,
   ],
   providers: [
-    CrmPrismaService,
     { provide: APP_FILTER, useClass: GlobalExceptionFilter },
     { provide: APP_FILTER, useClass: HttpExceptionFilter },
     { provide: APP_GUARD, useClass: JwtAuthGuard },

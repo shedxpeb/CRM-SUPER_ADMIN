@@ -152,43 +152,137 @@ export class TenantOpsService {
       throw new BadRequestException(`Invalid module keys: ${invalidModules.join(', ')}`);
     }
 
-    const updates = Object.entries(modules).map(([moduleKey, enabled]) =>
-      this.prisma.tenantModuleOverride.upsert({
-        where: { tenantId_moduleKey: { tenantId, moduleKey } },
-        update: { enabled, setById: actorId, updatedAt: new Date() },
-        create: { tenantId, moduleKey, enabled, setById: actorId },
-      }),
-    );
-    await Promise.all(updates);
-
-    const enabledModuleKeys = Object.entries(modules)
-      .filter(([, enabled]) => enabled)
-      .map(([key]) => key);
-
-    await this.prisma.tenant.update({
-      where: { id: tenantId },
-      data: { modulesEnabled: enabledModuleKeys, updatedById: actorId },
+    // Store previous state for compensating transaction
+    const previousModules = tenant.modulesEnabled as string[] || [];
+    const previousOverrides = await this.prisma.tenantModuleOverride.findMany({
+      where: { tenantId },
+      select: { moduleKey: true, enabled: true },
     });
 
-    // Propagate module state to the CRM organization so the CRM enforces it.
-    if (tenant.crmOrganizationId) {
-      const crmUpdates = Object.entries(modules).map(([moduleKey, enabled]) =>
-        this.crmPrisma.organizationModule.upsert({
-          where: {
-            organizationId_moduleKey: { organizationId: tenant.crmOrganizationId!, moduleKey },
-          },
-          update: { enabled, configuredById: actorId, updatedAt: new Date() },
-          create: {
-            organizationId: tenant.crmOrganizationId!,
-            moduleKey,
-            enabled,
-            configuredById: actorId,
-          },
-        }),
-      );
-      await Promise.all(crmUpdates);
+    try {
+      // Step 1: Update Platform DB in a transaction (Tenant.modulesEnabled + TenantModuleOverride)
+      await this.prisma.$transaction(async (platformTx) => {
+        const updates = Object.entries(modules).map(([moduleKey, enabled]) =>
+          platformTx.tenantModuleOverride.upsert({
+            where: { tenantId_moduleKey: { tenantId, moduleKey } },
+            update: { enabled, setById: actorId, updatedAt: new Date() },
+            create: { tenantId, moduleKey, enabled, setById: actorId },
+          }),
+        );
+        await Promise.all(updates);
+
+        const enabledModuleKeys = Object.entries(modules)
+          .filter(([, enabled]) => enabled)
+          .map(([key]) => key);
+
+        await platformTx.tenant.update({
+          where: { id: tenantId },
+          data: { modulesEnabled: enabledModuleKeys, updatedById: actorId },
+        });
+      });
+
+      // Step 2: Update CRM OrganizationModule via crmPrisma (compensating transaction)
+      if (tenant.crmOrganizationId) {
+        try {
+          await this.crmPrisma.$transaction(async (crmTx) => {
+            const crmUpdates = Object.entries(modules).map(([moduleKey, enabled]) =>
+              crmTx.organizationModule.upsert({
+                where: {
+                  organizationId_moduleKey: { organizationId: tenant.crmOrganizationId!, moduleKey },
+                },
+                update: {
+                  enabled,
+                  configuredById: actorId,
+                  updatedAt: new Date(),
+                  disabledAt: enabled ? null : new Date(),
+                  enabledAt: enabled ? new Date() : undefined,
+                },
+                create: {
+                  organizationId: tenant.crmOrganizationId!,
+                  moduleKey,
+                  enabled,
+                  configuredById: actorId,
+                  enabledAt: enabled ? new Date() : undefined,
+                  disabledAt: enabled ? null : new Date(),
+                },
+              }),
+            );
+            await Promise.all(crmUpdates);
+
+            // Step 3: When modules are disabled, remove module-specific permissions from non-system roles
+            const disabledModules = Object.entries(modules)
+              .filter(([, enabled]) => !enabled)
+              .map(([key]) => key);
+
+            if (disabledModules.length > 0 && tenant.crmOrganizationId) {
+              const roles = await crmTx.role.findMany({
+                where: {
+                  organizationId: tenant.crmOrganizationId,
+                  isDeleted: false,
+                  isSystem: false,
+                },
+              });
+
+              for (const role of roles) {
+                const currentPermissions = role.permissions || [];
+                const filteredPermissions = currentPermissions.filter((perm: string) => {
+                  const module = perm.split(':')[0];
+                  return !disabledModules.includes(module);
+                });
+
+                if (filteredPermissions.length !== currentPermissions.length) {
+                  await crmTx.role.update({
+                    where: { id: role.id },
+                    data: { permissions: filteredPermissions },
+                  });
+                }
+              }
+            }
+          });
+        } catch (error) {
+          // Compensating transaction: Revert Platform DB if CRM update fails
+          await this.prisma.$transaction(async (platformTx) => {
+            // Revert Tenant.modulesEnabled
+            await platformTx.tenant.update({
+              where: { id: tenantId },
+              data: {
+                modulesEnabled: previousModules,
+                syncError: 'Failed to sync module updates to CRM',
+                updatedById: actorId,
+              },
+            });
+
+            // Revert TenantModuleOverride to previous state
+            for (const override of previousOverrides) {
+              await platformTx.tenantModuleOverride.upsert({
+                where: { tenantId_moduleKey: { tenantId, moduleKey: override.moduleKey } },
+                update: { enabled: override.enabled, setById: actorId, updatedAt: new Date() },
+                create: { tenantId, moduleKey: override.moduleKey, enabled: override.enabled, setById: actorId },
+              });
+            }
+
+            // Remove any new overrides that didn't exist before
+            const previousModuleKeys = new Set(previousOverrides.map(o => o.moduleKey));
+            const currentOverrides = await platformTx.tenantModuleOverride.findMany({
+              where: { tenantId },
+            });
+            for (const current of currentOverrides) {
+              if (!previousModuleKeys.has(current.moduleKey)) {
+                await platformTx.tenantModuleOverride.delete({
+                  where: { tenantId_moduleKey: { tenantId, moduleKey: current.moduleKey } },
+                });
+              }
+            }
+          });
+          throw new BadRequestException('Failed to update CRM modules. Platform modules reverted to previous state.');
+        }
+      }
+    } catch (error) {
+      if (error instanceof BadRequestException) throw error;
+      throw new BadRequestException('Failed to update platform tenant modules');
     }
 
+    // Step 4: Create audit log entry
     await this.auditService.record({
       actorId: actorId,
       actorEmail: 'super-admin',
@@ -196,7 +290,7 @@ export class TenantOpsService {
       targetType: 'Tenant',
       targetId: tenantId,
       targetName: tenant.name,
-      metadata: { modules },
+      metadata: { modules, crmOrganizationId: tenant.crmOrganizationId },
       severity: 'INFO',
     });
 
@@ -300,7 +394,6 @@ export class TenantOpsService {
         isActive: dto.isActive ?? true,
         isVerified: true,
         version: 1,
-        passwordVersion: 1,
       },
       select: {
         id: true,
@@ -430,7 +523,6 @@ export class TenantOpsService {
       data: {
         password: await bcrypt.hash(newPassword, 10),
         passwordHistory: [...history.slice(-9), user.password],
-        passwordVersion: { increment: 1 },
         failedLoginAttempts: 0,
         isLocked: false,
         lockedUntil: null,
@@ -471,7 +563,7 @@ export class TenantOpsService {
     await this.crmPrisma.$transaction([
       this.crmPrisma.user.update({
         where: { id: userId },
-        data: { passwordVersion: { increment: 1 }, version: { increment: 1 } },
+        data: { version: { increment: 1 } },
       }),
       this.crmPrisma.session.updateMany({
         where: { userId, isRevoked: false },
@@ -528,7 +620,7 @@ export class TenantOpsService {
       }),
       this.crmPrisma.user.update({
         where: { id: userId },
-        data: { role: role.code, version: { increment: 1 } },
+        data: role.code ? { role: role.code, version: { increment: 1 } } : { version: { increment: 1 } },
       }),
     ]);
 
@@ -704,6 +796,17 @@ export class TenantOpsService {
     });
     if (!role) throw new NotFoundException('Role not found');
     if (role.isSystem) throw new BadRequestException('System roles cannot be deleted');
+
+    // Validation: Check for users assigned to this role
+    const userCount = await this.crmPrisma.userRole.count({
+      where: { roleId, organizationId: tenant.crmOrganizationId },
+    });
+
+    if (userCount > 0) {
+      throw new BadRequestException(
+        `Role is assigned to ${userCount} user(s). Unassign them before deleting.`,
+      );
+    }
 
     await this.crmPrisma.$transaction([
       this.crmPrisma.role.update({

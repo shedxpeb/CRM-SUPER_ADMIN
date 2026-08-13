@@ -4,12 +4,12 @@ import { TenantsService } from './tenants.service';
 import { TenantOpsController } from './tenant-ops.controller';
 import { TenantOpsService } from './tenant-ops.service';
 import { AuthModule } from '../auth/auth.module';
-import { CrmPrismaService } from '../../database/crm-prisma.service';
+import { DatabaseModule } from '../../database/database.module';
 
 @Module({
-  imports: [AuthModule],
+  imports: [AuthModule, DatabaseModule],
   controllers: [TenantsController, TenantOpsController],
-  providers: [TenantsService, TenantOpsService, CrmPrismaService],
+  providers: [TenantsService, TenantOpsService],
   exports: [TenantsService, TenantOpsService],
 })
 export class TenantsModule {}

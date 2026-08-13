@@ -8,41 +8,94 @@ datasource db {
   url      = env("CRM_DATABASE_URL")
 }
 
-// CRM MODELS (from ADMIN-CRM database - multi-tenant via organizationId)
-// The control plane (Super Admin) is the single source of truth for
-// users, roles, permissions and module toggles. These models mirror the
-// ADMIN-CRM tables so the platform can read/write them cross-DB.
+// ============================================================================
+// CRM MODELS (Shared tables that Super Admin needs to access)
+// These models mirror the ADMIN-CRM tables for cross-DB operations
+// Only include tables that Super Admin directly manages
+// ============================================================================
+
+model Organization {
+  id                   String               @id @default(uuid())
+  name                 String
+  email                String?              @unique
+  mobile               String?
+  address              String?
+  city                 String?
+  state                String?
+  country              String?              @default("India")
+  pincode              String?
+  gstNumber            String?
+  panNumber            String?
+  website              String?
+  status               String               @default("Active")
+  maxUsers             Int                  @default(25)
+  maxStorageGb         Int                  @default(10)
+  subscriptionTier     String               @default("free")
+  settings             Json?
+  createdById          String?
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+  isDeleted            Boolean              @default(false)
+  deletedAt            DateTime?
+  code                 String?              @unique
+  deletedById          String?
+  slug                 String?              @unique
+  version              Int                  @default(1)
+  maxRoleDepth         Int                  @default(5)
+  permissionPool       Json?
+  roleHierarchyEnabled Boolean              @default(true)
+  users                User[]
+  roles                Role[]
+  userRoles            UserRole[]
+  modules              OrganizationModule[]
+
+  @@index([status])
+  @@index([email])
+  @@index([name])
+  @@index([slug])
+  @@index([code])
+  @@index([isDeleted])
+  @@index([createdAt])
+}
 
 model User {
-  id                  String    @id @default(uuid())
-  email               String    @unique
-  password            String
-  isActive            Boolean   @default(false)
-  isVerified          Boolean   @default(false)
-  role                String    @default("EMPLOYEE")
-  organizationType    String    @default("COMPANY")
-  otp                 String?
-  otpExpiry           DateTime?
-  otpAttempts         Int       @default(0)
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
-  avatar              String?
-  department          String?
-  designation         String?
-  failedLoginAttempts Int       @default(0)
-  isLocked            Boolean   @default(false)
-  lastLogin           DateTime?
-  lockedUntil         DateTime?
-  mobile              String?
-  name                String?
-  organizationId      String?
-  passwordHistory     Json?
-  passwordVersion     Int       @default(1)
-  version             Int       @default(1)
-  isDeleted           Boolean   @default(false)
-  deletedAt           DateTime?
-  deletedById         String?
+  id                        String           @id @default(uuid())
+  email                     String           @unique
+  password                  String
+  isActive                  Boolean          @default(false)
+  isVerified                Boolean          @default(false)
+  otp                       String?
+  otpExpiry                 DateTime?
+  otpAttempts               Int              @default(0)
+  organizationType          String           @default("COMPANY")
+  createdAt                 DateTime         @default(now())
+  updatedAt                 DateTime         @updatedAt
+  avatar                    String?
+  department                String?
+  designation               String?
+  failedLoginAttempts       Int              @default(0)
+  isLocked                  Boolean          @default(false)
+  lastLogin                 DateTime?
+  lockedUntil               DateTime?
+  mobile                    String?
+  name                      String?
+  organizationId            String?
+  passwordHistory           Json?
+  deletedAt                 DateTime?
+  deletedById               String?
+  isDeleted                 Boolean          @default(false)
+  version                   Int              @default(1)
+  role                      String           @default("EMPLOYEE")
+  effectivePermissions      Json?
+  lastPermissionCalculation DateTime?
+  permissionVersion         Int              @default(1)
+  refreshTokens             RefreshToken[]
+  sessions                  Session[]
+  organization              Organization?    @relation(fields: [organizationId], references: [id])
+  userRoles                 UserRole[]
 
+  @@index([email])
+  @@index([role])
   @@index([organizationId])
   @@index([organizationId, role])
   @@index([isDeleted])
@@ -50,25 +103,35 @@ model User {
 }
 
 model Role {
-  id             String   @id @default(uuid())
+  id             String    @id @default(uuid())
   organizationId String
   name           String
-  code           String
+  code           String?
   description    String?
   permissions    String[]
-  isSystem       Boolean  @default(false)
+  permissionIds  String[]
+  inheritsFromId String?
+  isSystem       Boolean   @default(false)
+  level          Int       @default(0)
   createdById    String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-  version        Int      @default(1)
-  isDeleted      Boolean  @default(false)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  version        Int       @default(1)
+  isDeleted      Boolean   @default(false)
   deletedAt      DateTime?
   deletedById    String?
+
+  organization    Organization     @relation(fields: [organizationId], references: [id])
+  inheritsFrom    Role?            @relation("RoleHierarchy", fields: [inheritsFromId], references: [id])
+  inheritedRoles  Role[]           @relation("RoleHierarchy")
+  userRoles       UserRole[]
+  rolePermissions RolePermission[]
 
   @@unique([organizationId, name])
   @@unique([organizationId, code])
   @@index([organizationId])
   @@index([isDeleted])
+  @@index([inheritsFromId])
 }
 
 model Permission {
@@ -76,6 +139,7 @@ model Permission {
   organizationId String?
   key            String
   module         String
+  action         String
   label          String
   description    String?
   category       String   @default("general")
@@ -83,9 +147,12 @@ model Permission {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
+  rolePermissions RolePermission[]
+
   @@unique([organizationId, key])
   @@index([module])
   @@index([organizationId])
+  @@index([action])
 }
 
 model UserRole {
@@ -96,30 +163,50 @@ model UserRole {
   assignedById   String?
   assignedAt     DateTime @default(now())
 
+  user User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role         @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  org  Organization @relation(fields: [organizationId], references: [id])
+
   @@unique([userId, roleId, organizationId])
   @@index([userId])
   @@index([roleId])
   @@index([organizationId])
 }
 
+model RolePermission {
+  roleId       String
+  permissionId String
+  grantedById  String?
+  grantedAt    DateTime @default(now())
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@index([roleId])
+  @@index([permissionId])
+}
+
 model Session {
-  id             String    @id @default(uuid())
+  id             String         @id @default(uuid())
   userId         String
   organizationId String?
-  token          String    @unique
+  token          String         @unique
   refreshToken   String?
   device         String?
   browser        String?
   os             String?
   ipAddress      String?
   userAgent      String?
-  loginAt        DateTime  @default(now())
-  lastActivity   DateTime  @default(now())
+  loginAt        DateTime       @default(now())
+  lastActivity   DateTime       @default(now())
   expiresAt      DateTime
   idleExpiresAt  DateTime
-  isRevoked      Boolean   @default(false)
+  isRevoked      Boolean        @default(false)
   revokedAt      DateTime?
-  isRememberMe   Boolean   @default(false)
+  isRememberMe   Boolean        @default(false)
+  refreshTokens  RefreshToken[]
+  user           User           @relation(fields: [userId], references: [id])
 
   @@index([userId])
   @@index([token])
@@ -138,6 +225,8 @@ model RefreshToken {
   isRevoked           Boolean   @default(false)
   revokedAt           DateTime?
   replacedByTokenHash String?
+  session             Session   @relation(fields: [sessionId], references: [id])
+  user                User      @relation(fields: [userId], references: [id])
 
   @@index([tokenHash])
   @@index([sessionId])
@@ -171,8 +260,12 @@ model OrganizationModule {
   enabledAt      DateTime?
   disabledAt     DateTime?
   settings       Json?
+  grantedBy      String?
+  permissionSet  Json?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, moduleKey])
   @@index([organizationId])
@@ -180,14 +273,14 @@ model OrganizationModule {
 }
 
 model SystemSettings {
-  id        String   @id @default(uuid())
-  key       String   @unique
+  id        String      @id @default(uuid())
+  key       String      @unique
   value     Json
-  type      String   @default("STRING")
-  category  String   @default("general")
-  isSecret  Boolean  @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  type      String      @default("STRING")
+  category  String      @default("general")
+  isSecret  Boolean     @default(false)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
 
   @@index([category])
 }

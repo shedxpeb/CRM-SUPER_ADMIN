@@ -1,0 +1,4 @@
+-- THIS FILE HAS BEEN MOVED TO sql-scripts/crm-migration.sql
+-- CRM Database Migration Script
+-- This script should be run against the peb-crm database
+-- Usage: psql -h 127.0.0.1 -p 5432 -U postgres -d peb-crm -f ../sql-scripts/crm-migration.sql

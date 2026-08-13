@@ -22,6 +22,7 @@ export class MonitoringService {
     if (dto.action) where.action = { contains: dto.action, mode: 'insensitive' };
     if (dto.targetType) where.targetType = dto.targetType;
     if (dto.targetId) where.targetId = dto.targetId;
+    if (dto.tenantId) where.tenantId = dto.tenantId;
     if (dto.severity) where.severity = dto.severity;
     if (dto.q) {
       where.OR = [

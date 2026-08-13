@@ -12,6 +12,7 @@ export interface UserResponseDto {
   isLocked: boolean;
   department: string | null;
   designation: string | null;
+  activeSessions: number;
   roles: RoleSummaryDto[];
   createdAt: Date;
   updatedAt: Date;

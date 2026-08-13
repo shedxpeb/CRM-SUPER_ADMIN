@@ -10,8 +10,13 @@ export interface TenantResponseDto {
   maxStorageGB: number;
   modulesEnabled: string[] | null;
   syncState: string;
+  lastSyncedAt: Date | null;
+  syncError: string | null;
+  syncVersion: number;
+  notes: string | null;
   crmOrganizationId: string | null;
   version: number;
+  userCount: number;
   createdAt: Date;
   updatedAt: Date;
 }

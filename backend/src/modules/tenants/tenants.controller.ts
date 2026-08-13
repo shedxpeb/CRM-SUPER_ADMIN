@@ -71,6 +71,6 @@ export class TenantsController {
   @RequirePermissions('organization:suspend')
   @ApiOperation({ summary: 'Activate a suspended tenant' })
   unsuspend(@Param('id') id: string, @CurrentUser() actor: CurrentUser) {
-    return this.tenantsService.unsuspend(id, { id: actor.id, email: actor.email });
+    return this.tenantsService.unsuspend(id, {}, { id: actor.id, email: actor.email });
   }
 }
