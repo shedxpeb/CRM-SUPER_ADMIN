@@ -1,6 +1,9 @@
 import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client-crm';
 
+// Type definitions for Node.js globals
+declare const process: NodeJS.Process;
+
 @Injectable()
 export class CrmPrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
   constructor() {
