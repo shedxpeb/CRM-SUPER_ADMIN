@@ -1,7 +1,6 @@
 import { test, expect } from '@playwright/test';
 
 const UI = 'http://localhost:3001';
-const API = 'http://localhost:8001';
 const EMAIL = 'admin@pebcrm.com';
 const PASSWORD = 'Admin@123';
 
@@ -55,17 +54,17 @@ test.describe('SUPER-ADMIN Real User Flow', () => {
     await expect(page.locator('text=/total|companies|users|revenue|active/i').first()).toBeVisible({ timeout: 10000 });
   });
 
-  // ── 6. NAVIGATE TO COMPANIES ────────────────────────
-  test('navigate to Companies page', async ({ page }) => {
+  // ── 6. NAVIGATE TO TENANTS ─────────────────────────
+  test('navigate to Tenants page', async ({ page }) => {
     await page.goto(`${UI}/login`);
     await page.fill('input[type="email"]', EMAIL);
     await page.fill('input[type="password"]', PASSWORD);
     await page.click('button[type="submit"]');
     await page.waitForURL('**/super-admin', { timeout: 15000 });
 
-    // Click on Companies in sidebar
-    await page.click('text=/companies|organizations/i');
-    await page.waitForURL('**/companies', { timeout: 10000 });
+    // Click on Tenants in sidebar
+    await page.click('text=/tenants|companies|organizations/i');
+    await page.waitForURL('**/tenants', { timeout: 10000 });
     await expect(page.locator('body')).toBeVisible();
   });
 
@@ -82,16 +81,16 @@ test.describe('SUPER-ADMIN Real User Flow', () => {
     await expect(page.locator('body')).toBeVisible();
   });
 
-  // ── 8. NAVIGATE TO SUBSCRIPTIONS ────────────────────
-  test('navigate to Subscriptions page', async ({ page }) => {
+  // ── 8. NAVIGATE TO AUDIT LOGS ───────────────────────
+  test('navigate to Audit Logs page', async ({ page }) => {
     await page.goto(`${UI}/login`);
     await page.fill('input[type="email"]', EMAIL);
     await page.fill('input[type="password"]', PASSWORD);
     await page.click('button[type="submit"]');
     await page.waitForURL('**/super-admin', { timeout: 15000 });
 
-    await page.click('text=/subscriptions|plans|billing/i');
-    await page.waitForURL('**/subscriptions', { timeout: 10000 });
+    await page.click('text=/audit|logs|activity/i');
+    await page.waitForURL('**/audit-logs', { timeout: 10000 });
     await expect(page.locator('body')).toBeVisible();
   });
 

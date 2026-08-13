@@ -1,36 +1,83 @@
 'use client';
 
-import { memo } from 'react';
+import { memo, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard,
   Building2,
   Users,
-  CreditCard,
-  Database,
+  ShieldCheck,
+  KeySquare,
   FileText,
-  Settings,
-  Shield,
+  AlertTriangle,
+  HeartPulse,
   ChevronLeft,
   ChevronRight,
   Menu,
   X,
+  Settings,
+  LogIn,
+  Ban,
+  Monitor,
+  Clock,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { componentTextSizes } from '@/lib/design-system';
 import { useSASidebarStore } from '@/store/useSASidebarStore';
+import { useAuth } from '@/features/auth/AuthContext';
+import { can } from '@/features/auth/rbac';
 
-const navItems = [
-  { name: 'Dashboard', icon: LayoutDashboard, path: '/super-admin' },
-  { name: 'Companies', icon: Building2, path: '/super-admin/companies' },
-  { name: 'Users & RBAC', icon: Users, path: '/super-admin/users' },
-  { name: 'Subscriptions', icon: CreditCard, path: '/super-admin/subscriptions' },
-  { name: 'Backup', icon: Database, path: '/super-admin/backup' },
-  { name: 'Audit Logs', icon: FileText, path: '/super-admin/audit-logs' },
-  { name: 'Settings', icon: Settings, path: '/super-admin/settings' },
+interface NavItem {
+  name: string;
+  icon: typeof Building2;
+  path: string;
+  requiredPermission?: string;
+}
+
+interface NavGroup {
+  label: string;
+  items: NavItem[];
+}
+
+const NAV_GROUPS: NavGroup[] = [
+  {
+    label: 'Overview',
+    items: [{ name: 'Dashboard', icon: LayoutDashboard, path: '/super-admin' }],
+  },
+  {
+    label: 'Organization Management',
+    items: [
+      { name: 'Organizations', icon: Building2, path: '/super-admin/tenants', requiredPermission: 'tenants:read' },
+    ],
+  },
+  {
+    label: 'Identity & Access',
+    items: [
+      { name: 'Impersonation', icon: LogIn, path: '/super-admin/impersonation', requiredPermission: 'impersonation:execute' },
+      { name: 'Users', icon: Users, path: '/super-admin/users', requiredPermission: 'users:read' },
+      { name: 'Roles', icon: ShieldCheck, path: '/super-admin/roles', requiredPermission: 'roles:read' },
+      { name: 'Permissions', icon: KeySquare, path: '/super-admin/permissions', requiredPermission: 'permissions:read' },
+      { name: 'Sessions', icon: Monitor, path: '/super-admin/sessions', requiredPermission: 'sessions:read' },
+      { name: 'Login Attempts', icon: Clock, path: '/super-admin/login-attempts', requiredPermission: 'security:read' },
+      { name: 'Blocked IPs', icon: Ban, path: '/super-admin/blocked-ips', requiredPermission: 'security:write' },
+    ],
+  },
+  {
+    label: 'Monitoring',
+    items: [
+      { name: 'Audit Logs', icon: FileText, path: '/super-admin/audit-logs', requiredPermission: 'audit:read' },
+      { name: 'System Errors', icon: AlertTriangle, path: '/super-admin/errors', requiredPermission: 'monitoring:read' },
+      { name: 'Health Checks', icon: HeartPulse, path: '/super-admin/health-checks', requiredPermission: 'monitoring:read' },
+    ],
+  },
+  {
+    label: 'Platform',
+    items: [
+      { name: 'System Settings', icon: Settings, path: '/super-admin/settings', requiredPermission: 'settings:write' },
+    ],
+  },
 ];
 
 export const SuperAdminSidebar = memo(function SuperAdminSidebar() {
@@ -38,11 +85,21 @@ export const SuperAdminSidebar = memo(function SuperAdminSidebar() {
   const collapsed = useSASidebarStore((s) => s.collapsed);
   const toggleCollapsed = useSASidebarStore((s) => s.toggle);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { user } = useAuth();
 
   const isActive = (path: string) => {
     if (path === '/super-admin') return pathname === '/super-admin';
     return pathname?.startsWith(path);
   };
+
+  // Filter navigation items based on user permissions
+  const filteredNavGroups = NAV_GROUPS.map(group => ({
+    ...group,
+    items: group.items.filter(item => {
+      if (!item.requiredPermission) return true;
+      return can(user?.permissions, item.requiredPermission);
+    })
+  })).filter(group => group.items.length > 0);
 
   const sidebarContent = (
     <>
@@ -50,11 +107,11 @@ export const SuperAdminSidebar = memo(function SuperAdminSidebar() {
         {!collapsed && (
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 bg-gradient-to-br from-red-500 to-red-700 rounded-lg flex items-center justify-center shadow-lg shadow-red-900/30">
-              <Shield className="h-4.5 w-4.5 text-sa-text" />
+              <LayoutDashboard className="h-4.5 w-4.5 text-sa-text" />
             </div>
             <div>
               <span className="font-bold text-sa-text text-sm block leading-tight">Super Admin</span>
-              <span className={cn(componentTextSizes.badge, 'text-sa-text-muted leading-tight')}>PEB CRM Console</span>
+              <span className={cn(componentTextSizes.badge, 'text-sa-text-muted leading-tight')}>PEB Control Plane</span>
             </div>
           </div>
         )}
@@ -76,30 +133,46 @@ export const SuperAdminSidebar = memo(function SuperAdminSidebar() {
         </Button>
       </div>
 
-      <nav className="p-3 space-y-0.5 overflow-y-auto flex-1">
-        {navItems.map((item, index) => {
-          const Icon = item.icon;
-          const active = isActive(item.path);
-
+      <nav className="p-3 space-y-3 overflow-y-auto flex-1">
+        {filteredNavGroups.map((group) => {
           return (
-            <Link
-              key={`${item.path}-${index}`}
-              href={item.path}
-              onClick={() => setMobileOpen(false)}
-              className={cn(
-                'flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 group',
-                active
-                  ? 'bg-gradient-to-r from-red-600/20 to-red-600/5 text-red-400 font-medium'
-                  : 'text-sa-text-muted hover:bg-sa-border/50 hover:text-sa-text-secondary',
-                collapsed && 'justify-center'
+            <div key={group.label}>
+              {!collapsed && (
+                <div className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-sa-text-dim">
+                  {group.label}
+                </div>
               )}
-            >
-              <Icon className={cn('h-[18px] w-[18px] shrink-0 transition-colors', active ? 'text-red-400' : 'text-sa-text-dim group-hover:text-sa-text-muted')} />
-              {!collapsed && <span className={cn(componentTextSizes.nav.item)}>{item.name}</span>}
-              {active && !collapsed && (
-                <div className="ml-auto w-1.5 h-1.5 rounded-full bg-red-400" />
-              )}
-            </Link>
+              <div className="space-y-0.5">
+                {group.items.map((item) => {
+                  const Icon = item.icon;
+                  const active = isActive(item.path);
+                  return (
+                    <Link
+                      key={item.path}
+                      href={item.path}
+                      onClick={() => setMobileOpen(false)}
+                      className={cn(
+                        'flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 group',
+                        active
+                          ? 'bg-gradient-to-r from-red-600/20 to-red-600/5 text-red-400 font-medium'
+                          : 'text-sa-text-muted hover:bg-sa-border/50 hover:text-sa-text-secondary',
+                        collapsed && 'justify-center',
+                      )}
+                      title={collapsed ? item.name : undefined}
+                    >
+                      <Icon
+                        className={cn(
+                          'h-[18px] w-[18px] shrink-0 transition-colors',
+                          active ? 'text-red-400' : 'text-sa-text-dim group-hover:text-sa-text-muted',
+                        )}
+                      />
+                      {!collapsed && <span className={cn(componentTextSizes.nav.item)}>{item.name}</span>}
+                      {active && !collapsed && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-red-400" />}
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
           );
         })}
       </nav>
@@ -108,11 +181,11 @@ export const SuperAdminSidebar = memo(function SuperAdminSidebar() {
         <div className="p-4 border-t border-sa-border">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 bg-gradient-to-br from-sa-border-solid to-sa-card-solid rounded-full flex items-center justify-center text-sa-text text-xs font-bold ring-2 ring-sa-border">
-              SA
+              {user?.name?.charAt(0)?.toUpperCase() || 'SA'}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-sa-text-secondary truncate">System Admin</p>
-              <p className={cn(componentTextSizes.badge, 'text-sa-text-muted truncate')}>admin@pebcrm.com</p>
+              <p className="text-sm font-medium text-sa-text-secondary truncate">{user?.name || 'Admin'}</p>
+              <p className={cn(componentTextSizes.badge, 'text-sa-text-muted truncate')}>{user?.email}</p>
             </div>
           </div>
         </div>
@@ -132,7 +205,7 @@ export const SuperAdminSidebar = memo(function SuperAdminSidebar() {
       <aside
         className={cn(
           'hidden lg:flex flex-col fixed left-0 top-0 h-full bg-sa-sidebar border-r border-sa-border transition-all duration-300 z-40',
-          collapsed ? 'w-[68px]' : 'w-[220px]'
+          collapsed ? 'w-[68px]' : 'w-[220px]',
         )}
       >
         {sidebarContent}

@@ -3,8 +3,8 @@ import "./globals.css";
 import { Providers } from "./providers";
 
 export const metadata: Metadata = {
-  title: "Platform Admin - PEB CRM",
-  description: "Super admin platform for managing PEB CRM tenants",
+  title: "Platform Admin - PEB Platform",
+  description: "Super admin platform for managing PEB Platform tenants",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

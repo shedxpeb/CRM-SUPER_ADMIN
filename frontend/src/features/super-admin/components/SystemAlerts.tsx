@@ -3,7 +3,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-import { AlertTriangle, Shield, Database, Clock, CheckCircle2, XCircle, AlertCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, XCircle, AlertCircle } from 'lucide-react';
 import { componentTextSizes } from '@/lib/design-system';
 
 export interface SystemAlert {

@@ -1,5 +1,5 @@
 /**
- * PEB CRM Design System
+ * PEB Platform Design System
  * Consistent UI/UX standards across all modules
  */
 

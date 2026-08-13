@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
-:root {
+:root,
+[data-sa-theme="dark"] {
   --sa-sidebar: #0f0f13;
   --sa-card: #16161d;
   --sa-card-hover: #1c1c26;
@@ -66,10 +67,15 @@
   box-sizing: border-box;
 }
 
+html {
+  background: var(--sa-sidebar);
+  color: var(--sa-text);
+}
+
 body {
   margin: 0;
   padding: 0;
-  background: var(--sa-card);
+  background: var(--sa-sidebar);
   color: var(--sa-text);
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;

@@ -2,21 +2,15 @@
 
 import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
-import { api } from '@/lib/api';
-import { useSAThemeStore } from '@/store/useSAThemeStore';
-
-interface User {
-  id: string;
-  email: string;
-  name?: string;
-  role: string;
-  organizationId?: string;
-  organizationName?: string;
-  organizationType?: string;
-}
+import { getMe, login as apiLogin, logout as apiLogout } from '@/lib/api/auth';
+import {
+  ACCESS_TOKEN_KEY,
+  REFRESH_TOKEN_KEY,
+} from '@/lib/api';
+import type { AuthUser } from '@/lib/types';
 
 interface AuthContextValue {
-  user: User | null;
+  user: AuthUser | null;
   isLoading: boolean;
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
@@ -27,23 +21,22 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
 
   const fetchUser = useCallback(async () => {
-    const token = localStorage.getItem('sa_access_token');
+    const token = localStorage.getItem(ACCESS_TOKEN_KEY);
     if (!token) {
       setIsLoading(false);
       return;
     }
     try {
-      const res = await api.get<{ id: string; email: string; name?: string; role: string; organizationId?: string; organizationName?: string; organizationType?: string }>('/auth/me');
-      if (res.success && res.data) {
-        setUser(res.data);
-      }
+      const data = await getMe();
+      setUser(data);
     } catch {
-      localStorage.removeItem('sa_access_token');
+      localStorage.removeItem(ACCESS_TOKEN_KEY);
+      localStorage.removeItem(REFRESH_TOKEN_KEY);
       setUser(null);
     } finally {
       setIsLoading(false);
@@ -56,43 +49,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(async (email: string, password: string) => {
     try {
-      const res = await api.post<{
-        accessToken: string;
-        user: User;
-      }>('/auth/login', { email, password });
-
-      if (res.data?.accessToken) {
-        localStorage.setItem('sa_access_token', res.data.accessToken);
-        setUser(res.data.user);
-        return { success: true };
-      }
-
-      return { success: false, error: res.message || 'Login failed' };
-    } catch (err: any) {
-      return { success: false, error: err.message || 'Login failed' };
+      const data = await apiLogin(email, password);
+      localStorage.setItem(ACCESS_TOKEN_KEY, data.accessToken);
+      if (data.refreshToken) localStorage.setItem(REFRESH_TOKEN_KEY, data.refreshToken);
+      setUser(data.user);
+      return { success: true };
+    } catch (err: unknown) {
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Login failed',
+      };
     }
   }, []);
 
   const logout = useCallback(async () => {
     try {
-      await api.post('/auth/logout');
+      await apiLogout();
     } catch {
       // ignore
     }
-    localStorage.removeItem('sa_access_token');
+    localStorage.removeItem(ACCESS_TOKEN_KEY);
+    localStorage.removeItem(REFRESH_TOKEN_KEY);
     setUser(null);
     router.push('/login');
   }, [router]);
 
   return (
-    <AuthContext.Provider value={{
-      user,
-      isLoading,
-      isAuthenticated: !!user,
-      login,
-      logout,
-      refreshUser: fetchUser,
-    }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        isLoading,
+        isAuthenticated: !!user,
+        login,
+        logout,
+        refreshUser: fetchUser,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

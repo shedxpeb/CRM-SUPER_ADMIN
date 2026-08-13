@@ -4,34 +4,34 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import {
-  Building2, UserPlus, UserCheck, Shield, FileText, FolderKanban,
-  Calculator, Package, Database, Settings, LogIn, Zap,
+  Building2, UserPlus, Shield, FileText, Layers,
+  Database, Settings, LogIn, Zap, KeyRound, AlertTriangle,
 } from 'lucide-react';
 import { componentTextSizes } from '@/lib/design-system';
 
 export interface ActivityItem {
   id: string;
   userName: string;
-  companyName: string;
+  tenantName: string;
   action: string;
   module: string;
   time: string;
 }
 
 const moduleIconMap: Record<string, any> = {
-  company: Building2,
-  owner: Shield,
-  admin: UserCheck,
-  employee: UserPlus,
+  tenant: Building2,
+  user: UserPlus,
+  role: Shield,
+  auth: LogIn,
   login: LogIn,
-  lead: UserPlus,
-  project: FolderKanban,
-  quotation: FileText,
-  estimate: Calculator,
-  inventory: Package,
-  backup: Database,
+  api: KeyRound,
+  audit: FileText,
+  project: Layers,
+  storage: Database,
   settings: Settings,
-  automation: Zap,
+  security: Shield,
+  alert: AlertTriangle,
+  impersonation: Shield,
 };
 
 const actionColorMap: Record<string, string> = {
@@ -94,7 +94,7 @@ export function LiveActivityFeed({ activities }: LiveActivityFeedProps) {
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-sm text-sa-text-secondary font-medium">{item.userName}</span>
                       <span className={cn(componentTextSizes.badge, 'text-sa-text-muted')}>of</span>
-                      <span className={cn(componentTextSizes.badge, 'text-sa-text-muted')}>{item.companyName}</span>
+                      <span className={cn(componentTextSizes.badge, 'text-sa-text-muted')}>{item.tenantName}</span>
                     </div>
                     <div className="flex items-center gap-1.5 mt-0.5">
                       <Icon className="h-3 w-3 text-sa-text-muted" />
