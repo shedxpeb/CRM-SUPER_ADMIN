@@ -59,6 +59,44 @@ Render service settings:
 - Start command: `node dist/main`
 - Health check path: `/api/v1/health`
 
+### Render Environment Variables Configuration
+
+Configure these environment variables in your Render service settings:
+
+**Required Environment Variables:**
+- `DATABASE_URL` - PostgreSQL connection string for the platform database
+- `CRM_DATABASE_URL` - PostgreSQL connection string for the CRM database
+- `JWT_SECRET` - Secret key for JWT token signing (use a strong random string)
+- `FRONTEND_URL` - Frontend application URL (e.g., `https://your-frontend.vercel.app`)
+- `ALLOWED_ORIGINS` - Comma-separated list of allowed CORS origins (e.g., `https://your-frontend.vercel.app,https://your-backend.onrender.com`)
+
+**Optional Environment Variables:**
+- `NODE_ENV` - Set to `production` for production deployments
+- `PORT` - Port number (default: 8001)
+- `JWT_ACCESS_EXPIRES_IN` - JWT access token expiration (default: `30m`)
+- `JWT_EXPIRES_IN` - JWT refresh token expiration (default: `7d`)
+
+**Example for your deployment:**
+```
+DATABASE_URL=postgresql://super_admin_83u7_user:i4YE5VJ38DSloMS19SQOW640Vx9hkGBC@dpg-da02vr9t0dsc738osjf0-a.oregon-postgres.render.com/super_admin_83u7?sslmode=require
+CRM_DATABASE_URL=postgresql://super_admin_83u7_user:i4YE5VJ38DSloMS19SQOW640Vx9hkGBC@dpg-da02vr9t0dsc738osjf0-a.oregon-postgres.render.com/super_admin_83u7?sslmode=require
+JWT_SECRET=your-strong-random-secret-key-here
+FRONTEND_URL=https://crm-super-admin-6v3vicp1v-shedx.vercel.app
+ALLOWED_ORIGINS=https://crm-super-admin-6v3vicp1v-shedx.vercel.app,https://crm-super-admin.onrender.com
+```
+
+### Vercel Environment Variables Configuration
+
+Configure this environment variable in your Vercel project settings:
+
+**Required Environment Variables:**
+- `NEXT_PUBLIC_API_URL` - Backend API URL (e.g., `https://your-backend.onrender.com`)
+
+**Example for your deployment:**
+```
+NEXT_PUBLIC_API_URL=https://crm-super-admin.onrender.com
+```
+
 ### Failure policy
 
 Deployment is skipped (CI fails) when lint, type-check, build, tests, or environment validation fail. The post-deploy health check marks the run failed if the service does not come up healthy.

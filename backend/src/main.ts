@@ -44,7 +44,20 @@ async function bootstrap() {
   });
 
   await app.register(cors, {
-    origin: config.frontendUrl,
+    origin: (origin, callback) => {
+      // Allow requests with no origin (like mobile apps or curl requests)
+      if (!origin) return callback(null, true);
+      
+      // Get allowed origins from environment variable (comma-separated)
+      const allowedOriginsConfig = config.allowedOrigins;
+      const allowedOrigins = allowedOriginsConfig.split(',').map(url => url.trim());
+      
+      if (allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'), false);
+      }
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: [

@@ -25,6 +25,10 @@ export class AppConfigService {
     return this.configService.get<string>('frontendUrl', 'http://localhost:3001');
   }
 
+  get allowedOrigins(): string {
+    return this.configService.get<string>('allowedOrigins', this.frontendUrl);
+  }
+
   get databaseUrl(): string {
     return this.configService.get<string>('database.url', '');
   }
