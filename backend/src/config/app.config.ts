@@ -26,7 +26,24 @@ export class AppConfigService {
   }
 
   get allowedOrigins(): string {
-    return this.configService.get<string>('allowedOrigins', this.frontendUrl);
+    // Accept several env key spellings (comma-separated) so existing Render
+    // configs keep working regardless of which var name they set:
+    //   allowedOrigins / ALLOWED_ORIGINS / FRONTEND_URL (via frontendUrl)
+    const candidates = [
+      this.configService.get<string>('allowedOrigins', ''),
+      this.configService.get<string>('ALLOWED_ORIGINS', ''),
+      this.frontendUrl,
+    ];
+    const merged = candidates
+      .map((v) => (v || '').trim())
+      .filter(Boolean)
+      .join(',');
+    return merged || 'http://localhost:3001';
+  }
+
+  get allowVercelPreview(): boolean {
+    const raw = this.configService.get<string>('CORS_ALLOW_VERCEL_PREVIEW', 'true');
+    return raw.toLowerCase() !== 'false';
   }
 
   get databaseUrl(): string {

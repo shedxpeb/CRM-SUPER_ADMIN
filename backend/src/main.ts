@@ -8,6 +8,7 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppConfigService } from './config/app.config';
 import { AppModule } from './app.module';
 import { GlobalValidationPipe } from './common/pipes/validation.pipe';
+import { isOriginAllowed, parseAllowedOrigins } from './common/cors/allowed-origins';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestFastifyApplication>(AppModule, new FastifyAdapter(), {
@@ -43,16 +44,13 @@ async function bootstrap() {
     reply.header('X-Correlation-Id', correlationId);
   });
 
+  const corsAllowedOrigins = parseAllowedOrigins(config.allowedOrigins);
+  const allowVercelPreview = config.allowVercelPreview;
+
   await app.register(cors, {
     origin: (origin, callback) => {
       // Allow requests with no origin (like mobile apps or curl requests)
-      if (!origin) return callback(null, true);
-      
-      // Get allowed origins from environment variable (comma-separated)
-      const allowedOriginsConfig = config.allowedOrigins;
-      const allowedOrigins = allowedOriginsConfig.split(',').map(url => url.trim());
-      
-      if (allowedOrigins.includes(origin)) {
+      if (isOriginAllowed(origin, corsAllowedOrigins, { allowVercelApp: allowVercelPreview })) {
         callback(null, true);
       } else {
         callback(new Error('Not allowed by CORS'), false);
@@ -68,6 +66,11 @@ async function bootstrap() {
       'Idempotency-Key',
     ],
   });
+
+  console.log(
+    `CORS allowed origins: ${corsAllowedOrigins.join(', ') || '(none)'}` +
+      (allowVercelPreview ? ' (+ any *.vercel.app)' : ''),
+  );
 
   await app.register(cookie, {
     secret: config.jwtSecret || 'dev-cookie-secret',
