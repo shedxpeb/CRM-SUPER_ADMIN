@@ -6,7 +6,7 @@
   "private": true,
   "license": "UNLICENSED",
   "scripts": {
-    "build": "npx @nestjs/cli build",
+    "build": "npx prisma generate --schema=prisma/schema.prisma && npx prisma generate --schema=prisma/crm-schema.prisma && npx @nestjs/cli build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "npx @nestjs/cli start",
     "start:dev": "npx @nestjs/cli start --watch",
