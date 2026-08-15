@@ -1,3 +1,5 @@
+/// <reference types="jest" />
+
 import { isOriginAllowed, normalizeOrigin, parseAllowedOrigins } from './allowed-origins';
 
 describe('normalizeOrigin', () => {
