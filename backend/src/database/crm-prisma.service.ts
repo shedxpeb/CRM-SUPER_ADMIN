@@ -1,4 +1,4 @@
-import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client-crm';
 
 // Type definitions for Node.js globals
@@ -6,6 +6,8 @@ declare const process: NodeJS.Process;
 
 @Injectable()
 export class CrmPrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
+  private readonly logger = new Logger(CrmPrismaService.name);
+
   constructor() {
     super({
       datasources: {
@@ -17,7 +19,13 @@ export class CrmPrismaService extends PrismaClient implements OnModuleInit, OnMo
   }
 
   async onModuleInit() {
-    await this.$connect();
+    try {
+      await this.$connect();
+      this.logger.log('CRM database connected successfully');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.warn(`CRM database connection failed: ${message}`);
+    }
   }
 
   async onModuleDestroy() {
