@@ -1,7 +1,14 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001';
+const API_URL = process.env.NEXT_PUBLIC_API_URL;
 const API_PREFIX = '/api/v1';
 export const ACCESS_TOKEN_KEY = 'sa_access_token';
 export const REFRESH_TOKEN_KEY = 'sa_refresh_token';
+
+// Fail fast instead of silently pointing the production bundle at localhost.
+if (!API_URL) {
+  throw new Error(
+    'Missing required environment variable: NEXT_PUBLIC_API_URL (e.g. https://api.example.com/api/v1)',
+  );
+}
 
 export interface PaginationMeta {
   page: number;
@@ -44,6 +51,40 @@ function handleUnauthorized() {
   }
 }
 
+async function attemptRefresh(): Promise<string | null> {
+  const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
+  if (!refreshToken) return null;
+  try {
+    const res = await fetch(`${API_URL}${API_PREFIX}/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ refreshToken }),
+    });
+    if (!res.ok) return null;
+    const body = await res.json().catch(() => null);
+    const data = body?.data ?? body;
+    if (!data?.accessToken) return null;
+    localStorage.setItem(ACCESS_TOKEN_KEY, data.accessToken);
+    // The backend rotates the refresh token; keep the new one.
+    if (data.refreshToken) localStorage.setItem(REFRESH_TOKEN_KEY, data.refreshToken);
+    return data.accessToken;
+  } catch {
+    return null;
+  }
+}
+
+/** Single-flight refresh: concurrent 401s share one refresh call. */
+let refreshInFlight: Promise<string | null> | null = null;
+function refreshAccessToken(): Promise<string | null> {
+  if (!refreshInFlight) {
+    refreshInFlight = attemptRefresh().finally(() => {
+      refreshInFlight = null;
+    });
+  }
+  return refreshInFlight;
+}
+
 async function request<T = unknown>(
   endpoint: string,
   options: RequestInit = {},
@@ -64,7 +105,14 @@ async function request<T = unknown>(
     credentials: 'include',
   });
 
-  if (res.status === 401 && !retried) {
+  // Refresh once on 401 (never for the auth endpoints themselves, to avoid a loop),
+  // then retry the original request with the new access token.
+  const isAuthEndpoint = endpoint === '/auth/login' || endpoint === '/auth/refresh';
+  if (res.status === 401 && !retried && !isAuthEndpoint) {
+    const newToken = await refreshAccessToken();
+    if (newToken) {
+      return request<T>(endpoint, options, true);
+    }
     handleUnauthorized();
     throw new ApiError('Unauthorized', 401);
   }
