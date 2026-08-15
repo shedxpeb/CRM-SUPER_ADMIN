@@ -5,9 +5,10 @@ import { TenantOpsController } from './tenant-ops.controller';
 import { TenantOpsService } from './tenant-ops.service';
 import { AuthModule } from '../auth/auth.module';
 import { DatabaseModule } from '../../database/database.module';
+import { PlatformModule } from '../platform/platform.module';
 
 @Module({
-  imports: [AuthModule, DatabaseModule],
+  imports: [AuthModule, DatabaseModule, PlatformModule],
   controllers: [TenantsController, TenantOpsController],
   providers: [TenantsService, TenantOpsService],
   exports: [TenantsService, TenantOpsService],

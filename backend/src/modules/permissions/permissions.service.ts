@@ -23,7 +23,10 @@ export class PermissionsService {
 
     if (orphanPermissions.length > 0) {
       // Log orphans but don't throw - they might be intentional for future use
-      console.warn(`Found ${orphanPermissions.length} orphan permissions:`, orphanPermissions.map(p => p.key));
+      console.warn(
+        `Found ${orphanPermissions.length} orphan permissions:`,
+        orphanPermissions.map((p) => p.key),
+      );
     }
 
     return { count: orphanPermissions.length, permissions: orphanPermissions };
@@ -44,7 +47,10 @@ export class PermissionsService {
     });
 
     if (orphanRoles.length > 0) {
-      console.warn(`Found ${orphanRoles.length} orphan roles:`, orphanRoles.map(r => r.name));
+      console.warn(
+        `Found ${orphanRoles.length} orphan roles:`,
+        orphanRoles.map((r) => r.name),
+      );
     }
 
     return { count: orphanRoles.length, roles: orphanRoles };

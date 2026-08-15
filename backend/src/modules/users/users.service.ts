@@ -7,11 +7,14 @@ import {
 import * as bcrypt from 'bcrypt';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
+import { CrmPrismaService } from '../../database/crm-prisma.service';
 import { AppConfigService } from '../../config/app.config';
 import { AuditService } from '../auth/services/audit.service';
+import { TenantsService } from '../tenants/tenants.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { ListUsersDto } from './dto/list-users.dto';
+import { OrganizedUsersDto } from './dto/organized-users.dto';
 import { UserResponseDto } from './interfaces/user-response.interface';
 import { resolvePage, buildPageMeta } from '../../shared/helpers/pagination.helper';
 
@@ -34,8 +37,10 @@ const USER_SELECT = {
 export class UsersService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly crmPrisma: CrmPrismaService,
     private readonly config: AppConfigService,
     private readonly auditService: AuditService,
+    private readonly tenantsService: TenantsService,
   ) {}
 
   /**
@@ -115,6 +120,104 @@ export class UsersService {
     return {
       items: items.map((u) => this.mapUser(u)),
       meta: buildPageMeta(page, take, total, dto.sort),
+    };
+  }
+
+  /**
+   * Organization-centric user list: real CRM users across all tenants,
+   * each enriched with its organization (tenant) name. Used by the Users page
+   * which groups users by organization.
+   */
+  async findOrganized(dto: OrganizedUsersDto) {
+    const { page, skip, take } = resolvePage(dto);
+
+    // Map CRM organization id -> platform tenant (org) info.
+    const tenants = await this.prisma.tenant.findMany({
+      where: { isDeleted: false },
+      select: { id: true, name: true, status: true, crmOrganizationId: true },
+    });
+    const orgByCrmId = new Map<
+      string,
+      { tenantId: string; tenantName: string; tenantStatus: string }
+    >();
+    for (const t of tenants) {
+      if (t.crmOrganizationId) {
+        orgByCrmId.set(t.crmOrganizationId, {
+          tenantId: t.id,
+          tenantName: t.name,
+          tenantStatus: t.status,
+        });
+      }
+    }
+    const crmOrgIds = [...orgByCrmId.keys()];
+
+    const where: Record<string, unknown> = { isDeleted: false };
+    if (crmOrgIds.length > 0) where.organizationId = { in: crmOrgIds };
+    if (dto.organizationId) {
+      const tenant = tenants.find((t) => t.id === dto.organizationId);
+      where.organizationId = tenant?.crmOrganizationId ?? '__none__';
+    }
+    if (dto.role) where.role = dto.role;
+    if (dto.status === 'active') where.isActive = true;
+    if (dto.status === 'inactive') where.isActive = false;
+    if (dto.q) {
+      where.OR = [
+        { name: { contains: dto.q, mode: 'insensitive' } },
+        { email: { contains: dto.q, mode: 'insensitive' } },
+      ];
+    }
+
+    const [items, total] = await Promise.all([
+      this.crmPrisma.user.findMany({
+        where,
+        skip,
+        take,
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          role: true,
+          isActive: true,
+          isLocked: true,
+          lastLogin: true,
+          department: true,
+          designation: true,
+          mobile: true,
+          organizationId: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      }),
+      this.crmPrisma.user.count({ where }),
+    ]);
+
+    return {
+      items: items.map((u) => {
+        const org = u.organizationId ? orgByCrmId.get(u.organizationId) : undefined;
+        return {
+          id: u.id,
+          email: u.email,
+          name: u.name,
+          role: u.role,
+          isActive: u.isActive,
+          isLocked: u.isLocked,
+          lastLogin: u.lastLogin,
+          department: u.department,
+          designation: u.designation,
+          mobile: u.mobile,
+          createdAt: u.createdAt,
+          updatedAt: u.updatedAt,
+          organizationId: u.organizationId,
+          organizationName: org?.tenantName ?? '—',
+          tenantId: org?.tenantId ?? null,
+          tenantStatus: org?.tenantStatus ?? null,
+        };
+      }),
+      meta: {
+        ...buildPageMeta(page, take, total, dto.sort),
+        organizations: tenants.map((t) => ({ id: t.id, name: t.name, status: t.status })),
+      },
     };
   }
 

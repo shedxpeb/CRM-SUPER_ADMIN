@@ -88,6 +88,18 @@ export interface Role {
   updatedAt: string;
 }
 
+export interface LoginAttempt {
+  id: string;
+  email: string;
+  userId?: string | null;
+  ipAddress?: string | null;
+  userAgent?: string | null;
+  success: boolean;
+  failureReason?: string | null;
+  lockedUntil?: string | null;
+  createdAt: string;
+}
+
 export interface PlatformUser {
   id: string;
   email: string;
@@ -103,59 +115,7 @@ export interface PlatformUser {
   roles?: { id: string; name: string }[];
 }
 
-export interface PlatformSession {
-  id: string;
-  userId: string;
-  deviceInfo?: string | null;
-  userAgent?: string | null;
-  ipAddress?: string | null;
-  location?: string | null;
-  isActive: boolean;
-  lastActivityAt: string;
-  expiresAt: string;
-  createdAt: string;
-  revokedAt?: string | null;
-}
-
-export interface LoginAttempt {
-  id: string;
-  email: string;
-  userId?: string | null;
-  ipAddress?: string | null;
-  userAgent?: string | null;
-  success: boolean;
-  failureReason?: string | null;
-  lockedUntil?: string | null;
-  createdAt: string;
-}
-
-export interface BlockedIp {
-  id: string;
-  ipAddress: string;
-  reason?: string | null;
-  blockedUntil?: string | null;
-  isActive: boolean;
-  createdAt: string;
-  unblockedAt?: string | null;
-}
-
 // ── Monitoring & Operations ──────────────────────────────────────────────────
-
-export interface ImpersonationLog {
-  id: string;
-  superAdminId: string;
-  superAdminEmail: string;
-  tenantId: string;
-  targetUserId?: string | null;
-  targetUserEmail?: string | null;
-  reason?: string | null;
-  grantId?: string | null;
-  startedAt: string;
-  endedAt?: string | null;
-  durationSeconds?: number | null;
-  endedBy?: string | null;
-  tenant?: { id: string; name: string; slug: string; status: string };
-}
 
 export interface AuditLogEntry {
   id: string;
@@ -226,52 +186,17 @@ export interface TenantRole {
   updatedAt: string;
 }
 
-// ── CRM Modules ────────────────────────────────────────────────────────────────
+// ── Platform Modules (catalog loaded from backend) ─────────────────────────────
 
-export type CrmModuleKey =
-  | 'leads'
-  | 'customers'
-  | 'vendors'
-  | 'inventory'
-  | 'purchase_orders'
-  | 'projects'
-  | 'tracking'
-  | 'quotations'
-  | 'invoices'
-  | 'reports'
-  | 'hr'
-  | 'finance';
-
-export const CRM_MODULES: { key: CrmModuleKey; label: string; icon: string; category: 'sales' | 'operations' | 'finance' | 'hr' }[] = [
-  { key: 'leads', label: 'Leads', icon: 'Target', category: 'sales' },
-  { key: 'customers', label: 'Customers', icon: 'Users', category: 'sales' },
-  { key: 'vendors', label: 'Vendors', icon: 'Truck', category: 'operations' },
-  { key: 'inventory', label: 'Inventory', icon: 'Package', category: 'operations' },
-  { key: 'purchase_orders', label: 'Purchase Orders', icon: 'ShoppingCart', category: 'operations' },
-  { key: 'projects', label: 'Projects', icon: 'FolderKanban', category: 'operations' },
-  { key: 'tracking', label: 'Tracking', icon: 'MapPin', category: 'operations' },
-  { key: 'quotations', label: 'Quotations', icon: 'FileText', category: 'finance' },
-  { key: 'invoices', label: 'Invoices', icon: 'Receipt', category: 'finance' },
-  { key: 'reports', label: 'Reports', icon: 'BarChart3', category: 'finance' },
-  { key: 'hr', label: 'HR', icon: 'UserCheck', category: 'hr' },
-  { key: 'finance', label: 'Finance', icon: 'Calculator', category: 'finance' },
-];
-
-export const CRM_ACTIONS = ['read', 'create', 'update', 'delete', 'export', 'approve'] as const;
-
-export interface TenantModule {
-  tenantId: string;
-  moduleKey: CrmModuleKey;
-  enabled: boolean;
-  enabledAt?: string | null;
-  enabledBy?: string | null;
+export interface ModuleCatalogEntry {
+  key: string;
+  label: string;
+  category: string;
 }
 
-export interface CrmPermission {
-  module: CrmModuleKey;
-  action: (typeof CRM_ACTIONS)[number];
-  granted: boolean;
-}
+export type TenantModule = Record<string, boolean>;
+
+export type CrmPermissionMatrix = Record<string, Record<string, boolean>>;
 
 // ── Platform Config ──────────────────────────────────────────────────────────
 

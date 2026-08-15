@@ -38,7 +38,7 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--sa-sidebar)' }}>
       <div className="w-full max-w-sm p-8">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-xl bg-gradient-to-br from-red-500 to-red-700 shadow-lg shadow-red-900/30 mb-4">
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-xl bg-gradient-to-br from-sa-accent-bold to-sa-accent shadow-lg shadow-sa-accent/30 mb-4">
             <Shield className="h-7 w-7 text-white" />
           </div>
           <h1 className="text-xl font-bold" style={{ color: 'var(--sa-text)' }}>Super Admin</h1>
@@ -47,7 +47,7 @@ export default function LoginPage() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {error && (
-            <div className="p-3 rounded-lg text-sm" style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.2)' }}>
+            <div className="p-3 rounded-lg text-sm" style={{ background: 'rgba(241,91,80,0.12)', color: 'var(--sa-danger)', border: '1px solid rgba(241,91,80,0.28)' }}>
               {error}
             </div>
           )}

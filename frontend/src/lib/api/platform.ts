@@ -1,5 +1,10 @@
 import { api, buildQueryString } from '../api';
-import type { Paginated, PlatformSetting } from '../types';
+import type { ModuleCatalogEntry, Paginated, PlatformSetting } from '../types';
+
+export async function getModuleCatalog(): Promise<ModuleCatalogEntry[]> {
+  const res = await api.get<ModuleCatalogEntry[]>('/platform/modules');
+  return res.data;
+}
 
 export async function getPlatformSettings(params?: {
   page?: number;

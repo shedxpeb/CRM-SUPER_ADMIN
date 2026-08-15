@@ -5,11 +5,15 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
+import { Prisma as PrismaCrm, SystemRole as CrmSystemRole } from '@prisma/client-crm';
 import { PrismaService } from '../../database/prisma.service';
 import { CrmPrismaService } from '../../database/crm-prisma.service';
 import { AuditService } from '../auth/services/audit.service';
 import { resolvePage, buildPageMeta } from '../../shared/helpers/pagination.helper';
 import { PaginationDto } from '../../common/dto/pagination.dto';
+import { normalizeModuleKey } from '../../common/utils/module-key.util';
+import { MODULE_CATALOG_KEYS } from '../../common/constants/module-catalog.constants';
+import { CRM_PERMISSION_CATALOG } from './crm-provisioning.constants';
 import {
   AssignTenantUserRoleDto,
   CreateTenantRoleDto,
@@ -17,6 +21,8 @@ import {
   ResetTenantUserPasswordDto,
   SetTenantRolePermissionsDto,
   SetTenantUserActiveDto,
+  SetTenantUserModulesDto,
+  SetTenantUserPermissionsDto,
   UpdateTenantRoleDto,
   UpdateTenantUserDto,
 } from './dto/tenant-crm.dto';
@@ -43,7 +49,7 @@ export class TenantOpsService {
     private readonly auditService: AuditService,
   ) {}
 
-  // ── Activity / Impersonations / Modules ─────────────────────────────────────
+  // ── Activity / Modules ──────────────────────────────────────────────────────
 
   async getActivity(tenantId: string, dto: PaginationDto) {
     await ensureTenant(this.prisma, tenantId);
@@ -75,36 +81,6 @@ export class TenantOpsService {
     return { items, meta: buildPageMeta(page, take, total, dto.sort) };
   }
 
-  async getImpersonations(tenantId: string, dto: PaginationDto) {
-    await ensureTenant(this.prisma, tenantId);
-    const { page, skip, take } = resolvePage(dto);
-    const where = { tenantId };
-    const [items, total] = await Promise.all([
-      this.prisma.impersonationLog.findMany({
-        where,
-        orderBy: { startedAt: 'desc' },
-        skip,
-        take,
-        select: {
-          id: true,
-          superAdminId: true,
-          superAdminEmail: true,
-          tenantId: true,
-          targetUserId: true,
-          targetUserEmail: true,
-          reason: true,
-          grantId: true,
-          startedAt: true,
-          endedAt: true,
-          durationSeconds: true,
-          endedBy: true,
-        },
-      }),
-      this.prisma.impersonationLog.count({ where }),
-    ]);
-    return { items, meta: buildPageMeta(page, take, total, dto.sort) };
-  }
-
   async getModules(tenantId: string) {
     const tenant = await this.prisma.tenant.findUnique({
       where: { id: tenantId },
@@ -132,20 +108,7 @@ export class TenantOpsService {
     const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
     if (!tenant || tenant.isDeleted) throw new NotFoundException('Tenant not found');
 
-    const validModules = [
-      'dashboard',
-      'leads',
-      'customers',
-      'projects',
-      'vendors',
-      'inventory',
-      'warehouse',
-      'purchases',
-      'tracking',
-      'reports',
-      'users',
-      'roles',
-    ];
+    const validModules = MODULE_CATALOG_KEYS;
 
     const invalidModules = Object.keys(modules).filter((m) => !validModules.includes(m));
     if (invalidModules.length > 0) {
@@ -153,7 +116,7 @@ export class TenantOpsService {
     }
 
     // Store previous state for compensating transaction
-    const previousModules = tenant.modulesEnabled as string[] || [];
+    const previousModules = (tenant.modulesEnabled as string[]) || [];
     const previousOverrides = await this.prisma.tenantModuleOverride.findMany({
       where: { tenantId },
       select: { moduleKey: true, enabled: true },
@@ -185,10 +148,15 @@ export class TenantOpsService {
       if (tenant.crmOrganizationId) {
         try {
           await this.crmPrisma.$transaction(async (crmTx) => {
-            const crmUpdates = Object.entries(modules).map(([moduleKey, enabled]) =>
-              crmTx.organizationModule.upsert({
+            // CRM canonicalizes module keys to singular form (matches permission prefix)
+            const crmUpdates = Object.entries(modules).map(([moduleKey, enabled]) => {
+              const crmModuleKey = normalizeModuleKey(moduleKey);
+              return crmTx.organizationModule.upsert({
                 where: {
-                  organizationId_moduleKey: { organizationId: tenant.crmOrganizationId!, moduleKey },
+                  organizationId_moduleKey: {
+                    organizationId: tenant.crmOrganizationId!,
+                    moduleKey: crmModuleKey,
+                  },
                 },
                 update: {
                   enabled,
@@ -199,20 +167,20 @@ export class TenantOpsService {
                 },
                 create: {
                   organizationId: tenant.crmOrganizationId!,
-                  moduleKey,
+                  moduleKey: crmModuleKey,
                   enabled,
                   configuredById: actorId,
                   enabledAt: enabled ? new Date() : undefined,
                   disabledAt: enabled ? null : new Date(),
                 },
-              }),
-            );
+              });
+            });
             await Promise.all(crmUpdates);
 
             // Step 3: When modules are disabled, remove module-specific permissions from non-system roles
             const disabledModules = Object.entries(modules)
               .filter(([, enabled]) => !enabled)
-              .map(([key]) => key);
+              .map(([key]) => normalizeModuleKey(key));
 
             if (disabledModules.length > 0 && tenant.crmOrganizationId) {
               const roles = await crmTx.role.findMany({
@@ -238,8 +206,16 @@ export class TenantOpsService {
                 }
               }
             }
+
+            // Invalidate effective-permission caches for every user of the org
+            // so permission checks reflect the new module state immediately
+            // (otherwise stale cached permissions last up to 5 minutes).
+            await crmTx.user.updateMany({
+              where: { organizationId: tenant.crmOrganizationId },
+              data: { lastPermissionCalculation: null },
+            });
           });
-        } catch (error) {
+        } catch {
           // Compensating transaction: Revert Platform DB if CRM update fails
           await this.prisma.$transaction(async (platformTx) => {
             // Revert Tenant.modulesEnabled
@@ -257,12 +233,17 @@ export class TenantOpsService {
               await platformTx.tenantModuleOverride.upsert({
                 where: { tenantId_moduleKey: { tenantId, moduleKey: override.moduleKey } },
                 update: { enabled: override.enabled, setById: actorId, updatedAt: new Date() },
-                create: { tenantId, moduleKey: override.moduleKey, enabled: override.enabled, setById: actorId },
+                create: {
+                  tenantId,
+                  moduleKey: override.moduleKey,
+                  enabled: override.enabled,
+                  setById: actorId,
+                },
               });
             }
 
             // Remove any new overrides that didn't exist before
-            const previousModuleKeys = new Set(previousOverrides.map(o => o.moduleKey));
+            const previousModuleKeys = new Set(previousOverrides.map((o) => o.moduleKey));
             const currentOverrides = await platformTx.tenantModuleOverride.findMany({
               where: { tenantId },
             });
@@ -274,7 +255,9 @@ export class TenantOpsService {
               }
             }
           });
-          throw new BadRequestException('Failed to update CRM modules. Platform modules reverted to previous state.');
+          throw new BadRequestException(
+            'Failed to update CRM modules. Platform modules reverted to previous state.',
+          );
         }
       }
     } catch (error) {
@@ -378,8 +361,11 @@ export class TenantOpsService {
     });
     if (existing) throw new ConflictException('A user with this email already exists');
 
-    const role = dto.role?.toUpperCase() || DEFAULT_CRM_ROLE;
-    const password = this.generateTemporaryPassword();
+    const roleCode = dto.role?.toUpperCase() || DEFAULT_CRM_ROLE;
+    // No auto-generated password. If the operator supplied one it is set
+    // directly; otherwise the user gets an unusable hash and must set their
+    // own password through the CRM OTP (forgot-password) flow.
+    const password = dto.password ?? crypto.randomUUID();
 
     const user = await this.crmPrisma.user.create({
       data: {
@@ -388,11 +374,12 @@ export class TenantOpsService {
         mobile: dto.mobile,
         department: dto.department,
         designation: dto.designation,
-        role,
+        role: roleCode as CrmSystemRole,
         organizationId: tenant.crmOrganizationId,
         password: await bcrypt.hash(password, 10),
         isActive: dto.isActive ?? true,
         isVerified: true,
+        mustChangePassword: false,
         version: 1,
       },
       select: {
@@ -405,6 +392,28 @@ export class TenantOpsService {
       },
     });
 
+    // Link the user to the matching system role so the CRM RBAC resolver
+    // (which reads effective permissions via UserRole) grants access.
+    const systemRole = await this.crmPrisma.role.findFirst({
+      where: {
+        organizationId: tenant.crmOrganizationId,
+        code: roleCode,
+        isSystem: true,
+        isDeleted: false,
+      },
+    });
+    if (systemRole) {
+      await this.crmPrisma.userRole.create({
+        data: {
+          userId: user.id,
+          roleId: systemRole.id,
+          organizationId: tenant.crmOrganizationId,
+          assignedById: actor.id,
+          assignedAt: new Date(),
+        },
+      });
+    }
+
     await this.auditService.record({
       actorId: actor.id,
       actorEmail: actor.email,
@@ -413,10 +422,10 @@ export class TenantOpsService {
       targetId: user.id,
       targetName: user.email,
       tenantId,
-      metadata: { email: user.email, role: user.role },
+      metadata: { email: user.email, role: user.role, passwordSet: !!dto.password },
     });
 
-    return { ...user, temporaryPassword: password };
+    return user;
   }
 
   async updateTenantUser(
@@ -515,14 +524,21 @@ export class TenantOpsService {
     });
     if (!user) throw new NotFoundException('Tenant user not found');
 
-    const newPassword = dto?.newPassword || this.generateTemporaryPassword();
     const history = Array.isArray(user.passwordHistory) ? (user.passwordHistory as string[]) : [];
+    // No auto-generated password: either the operator supplies a new one, or the
+    // account is left with an unusable hash so the user must set a new password
+    // through the CRM OTP (forgot-password) flow.
+    const newPassword = dto?.newPassword ?? crypto.randomUUID();
 
     await this.crmPrisma.user.update({
       where: { id: userId },
       data: {
         password: await bcrypt.hash(newPassword, 10),
         passwordHistory: [...history.slice(-9), user.password],
+        // Bump the password version so previously issued JWTs (which carry
+        // passwordVersion) are rejected by the CRM JWT strategy immediately.
+        passwordVersion: { increment: 1 },
+        mustChangePassword: false,
         failedLoginAttempts: 0,
         isLocked: false,
         lockedUntil: null,
@@ -538,14 +554,15 @@ export class TenantOpsService {
       targetId: userId,
       targetName: user.email,
       tenantId,
-      metadata: { generated: !dto?.newPassword },
+      metadata: { passwordSet: !!dto?.newPassword },
     });
 
     return {
       success: true,
-      message: 'Password reset',
+      message: dto?.newPassword
+        ? 'Password updated'
+        : 'Password cleared — the user must set a new one via the OTP (forgot password) flow',
       email: user.email,
-      temporaryPassword: dto?.newPassword ? undefined : newPassword,
     };
   }
 
@@ -589,6 +606,26 @@ export class TenantOpsService {
     return { success: true, message: 'All sessions revoked for user' };
   }
 
+  async getTenantUserRoles(tenantId: string, userId: string) {
+    const tenant = await ensureTenant(this.prisma, tenantId);
+    const user = await this.crmPrisma.user.findFirst({
+      where: { id: userId, organizationId: tenant.crmOrganizationId, isDeleted: false },
+      select: { id: true, email: true },
+    });
+    if (!user) throw new NotFoundException('Tenant user not found');
+
+    const assignments = await this.crmPrisma.userRole.findMany({
+      where: { userId, organizationId: tenant.crmOrganizationId },
+      include: { role: { select: { id: true, name: true, code: true } } },
+    });
+
+    return assignments.map((a) => ({
+      id: a.role.id,
+      name: a.role.name,
+      code: a.role.code,
+    }));
+  }
+
   async assignTenantUserRole(
     tenantId: string,
     userId: string,
@@ -620,7 +657,9 @@ export class TenantOpsService {
       }),
       this.crmPrisma.user.update({
         where: { id: userId },
-        data: role.code ? { role: role.code, version: { increment: 1 } } : { version: { increment: 1 } },
+        data: role.code
+          ? { role: role.code as CrmSystemRole, version: { increment: 1 } }
+          : { version: { increment: 1 } },
       }),
     ]);
 
@@ -670,6 +709,176 @@ export class TenantOpsService {
     });
 
     return { success: true, message: 'Role removed from user' };
+  }
+
+  // ── User permission overrides (grant/deny) ──────────────────────────────────
+
+  async getTenantUserPermissions(tenantId: string, userId: string) {
+    const tenant = await ensureTenant(this.prisma, tenantId);
+    const user = await this.crmPrisma.user.findFirst({
+      where: { id: userId, organizationId: tenant.crmOrganizationId, isDeleted: false },
+      select: { id: true, email: true },
+    });
+    if (!user) throw new NotFoundException('Tenant user not found');
+
+    const overrides = await this.crmPrisma.userPermission.findMany({
+      where: { userId, organizationId: tenant.crmOrganizationId },
+      select: { permissionKey: true, granted: true },
+    });
+
+    return {
+      userId: user.id,
+      email: user.email,
+      granted: overrides.filter((o) => o.granted).map((o) => o.permissionKey),
+      denied: overrides.filter((o) => !o.granted).map((o) => o.permissionKey),
+    };
+  }
+
+  async setTenantUserPermissions(
+    tenantId: string,
+    userId: string,
+    dto: SetTenantUserPermissionsDto,
+    actor: { id: string; email: string },
+  ) {
+    const tenant = await ensureTenant(this.prisma, tenantId);
+    const user = await this.crmPrisma.user.findFirst({
+      where: { id: userId, organizationId: tenant.crmOrganizationId, isDeleted: false },
+      select: { id: true, email: true },
+    });
+    if (!user) throw new NotFoundException('Tenant user not found');
+
+    const entries: { permissionKey: string; granted: boolean }[] = [
+      ...dto.granted.map((key) => ({ permissionKey: key, granted: true })),
+      ...dto.denied.map((key) => ({ permissionKey: key, granted: false })),
+    ];
+
+    await this.crmPrisma.$transaction(async (tx) => {
+      await tx.userPermission.deleteMany({
+        where: { userId, organizationId: tenant.crmOrganizationId },
+      });
+      if (entries.length > 0) {
+        await tx.userPermission.createMany({
+          data: entries.map((e) => ({
+            userId,
+            organizationId: tenant.crmOrganizationId,
+            permissionKey: e.permissionKey,
+            granted: e.granted,
+            createdById: actor.id,
+          })),
+        });
+      }
+      // Bump the permission version so cached effective permissions are
+      // recalculated immediately (no stale cache, no manual refresh).
+      await tx.user.update({
+        where: { id: userId },
+        data: { permissionVersion: { increment: 1 }, lastPermissionCalculation: null },
+      });
+    });
+
+    await this.auditService.record({
+      actorId: actor.id,
+      actorEmail: actor.email,
+      action: 'tenant.user.set_permissions',
+      targetType: 'User',
+      targetId: userId,
+      targetName: user.email,
+      tenantId,
+      metadata: {
+        granted: dto.granted.length,
+        denied: dto.denied.length,
+      },
+    });
+
+    return {
+      success: true,
+      message: 'User permissions updated',
+      granted: entries.filter((e) => e.granted).map((e) => e.permissionKey),
+      denied: entries.filter((e) => !e.granted).map((e) => e.permissionKey),
+    };
+  }
+
+  // ── User module access overrides ────────────────────────────────────────────
+
+  async getTenantUserModules(tenantId: string, userId: string) {
+    const tenant = await ensureTenant(this.prisma, tenantId);
+    const user = await this.crmPrisma.user.findFirst({
+      where: { id: userId, organizationId: tenant.crmOrganizationId, isDeleted: false },
+      select: { id: true, email: true },
+    });
+    if (!user) throw new NotFoundException('Tenant user not found');
+
+    const overrides = await this.crmPrisma.userModuleAccess.findMany({
+      where: { userId, organizationId: tenant.crmOrganizationId },
+      select: { moduleKey: true, allowed: true },
+    });
+
+    return {
+      userId: user.id,
+      email: user.email,
+      allowed: overrides.filter((o) => o.allowed).map((o) => o.moduleKey),
+      denied: overrides.filter((o) => !o.allowed).map((o) => o.moduleKey),
+    };
+  }
+
+  async setTenantUserModules(
+    tenantId: string,
+    userId: string,
+    dto: SetTenantUserModulesDto,
+    actor: { id: string; email: string },
+  ) {
+    const tenant = await ensureTenant(this.prisma, tenantId);
+    const user = await this.crmPrisma.user.findFirst({
+      where: { id: userId, organizationId: tenant.crmOrganizationId, isDeleted: false },
+      select: { id: true, email: true },
+    });
+    if (!user) throw new NotFoundException('Tenant user not found');
+
+    const entries: { moduleKey: string; allowed: boolean }[] = [
+      ...dto.allowed.map((key) => ({ moduleKey: normalizeModuleKey(key), allowed: true })),
+      ...dto.denied.map((key) => ({ moduleKey: normalizeModuleKey(key), allowed: false })),
+    ];
+
+    await this.crmPrisma.$transaction(async (tx) => {
+      await tx.userModuleAccess.deleteMany({
+        where: { userId, organizationId: tenant.crmOrganizationId },
+      });
+      if (entries.length > 0) {
+        await tx.userModuleAccess.createMany({
+          data: entries.map((e) => ({
+            userId,
+            organizationId: tenant.crmOrganizationId,
+            moduleKey: e.moduleKey,
+            allowed: e.allowed,
+            createdById: actor.id,
+          })),
+        });
+      }
+      await tx.user.update({
+        where: { id: userId },
+        data: { permissionVersion: { increment: 1 }, lastPermissionCalculation: null },
+      });
+    });
+
+    await this.auditService.record({
+      actorId: actor.id,
+      actorEmail: actor.email,
+      action: 'tenant.user.set_modules',
+      targetType: 'User',
+      targetId: userId,
+      targetName: user.email,
+      tenantId,
+      metadata: {
+        allowed: dto.allowed.length,
+        denied: dto.denied.length,
+      },
+    });
+
+    return {
+      success: true,
+      message: 'User module access updated',
+      allowed: entries.filter((e) => e.allowed).map((e) => e.moduleKey),
+      denied: entries.filter((e) => !e.allowed).map((e) => e.moduleKey),
+    };
   }
 
   // ── Tenant roles (CRM Role) ─────────────────────────────────────────────────
@@ -889,6 +1098,20 @@ export class TenantOpsService {
       },
     });
 
+    // Invalidate the CRM per-user effective-permission cache for everyone with
+    // this role so the new permissions take effect immediately (the CRM's
+    // PermissionInheritanceService otherwise serves cached permissions for 5 min).
+    const affectedUsers = await this.crmPrisma.userRole.findMany({
+      where: { roleId, organizationId: tenant.crmOrganizationId },
+      select: { userId: true },
+    });
+    if (affectedUsers.length > 0) {
+      await this.crmPrisma.user.updateMany({
+        where: { id: { in: affectedUsers.map((u) => u.userId) } },
+        data: { lastPermissionCalculation: null, effectivePermissions: PrismaCrm.DbNull },
+      });
+    }
+
     await this.auditService.record({
       actorId: actor.id,
       actorEmail: actor.email,
@@ -905,18 +1128,28 @@ export class TenantOpsService {
 
   // ── Tenant permissions / login history / sessions ───────────────────────────
 
+  getPermissionCatalog(): Record<string, string[]> {
+    return CRM_PERMISSION_CATALOG;
+  }
+
   async getTenantPermissions(tenantId: string): Promise<Record<string, Record<string, boolean>>> {
     const tenant = await ensureTenant(this.prisma, tenantId);
-    const permissions = await this.crmPrisma.permission.findMany({
-      where: { organizationId: tenant.crmOrganizationId },
-      select: { key: true, module: true },
+    const roles = await this.crmPrisma.role.findMany({
+      where: { organizationId: tenant.crmOrganizationId, isDeleted: false },
+      select: { permissions: true },
     });
 
+    // CRM permissions live on Role.permissions (String[]) — the Permission table
+    // is not populated per-org. Aggregate the union of granted permission keys,
+    // grouped by module, so the matrix reflects what roles can actually do.
     const matrix: Record<string, Record<string, boolean>> = {};
-    permissions.forEach((perm) => {
-      if (!matrix[perm.module]) matrix[perm.module] = {};
-      matrix[perm.module][perm.key] = true;
-    });
+    for (const role of roles) {
+      for (const key of role.permissions ?? []) {
+        const module = key.split(':')[0] || 'other';
+        if (!matrix[module]) matrix[module] = {};
+        matrix[module][key] = true;
+      }
+    }
     return matrix;
   }
 

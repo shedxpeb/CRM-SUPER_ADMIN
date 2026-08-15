@@ -5,6 +5,7 @@ import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { ListUsersDto } from './dto/list-users.dto';
+import { OrganizedUsersDto } from './dto/organized-users.dto';
 import { AdminResetPasswordDto, SuspendUserDto } from './dto/admin-user-actions.dto';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -19,6 +20,13 @@ export class UsersController {
   @ApiOperation({ summary: 'List platform users' })
   findAll(@Req() req: FastifyRequest & { query: ListUsersDto }) {
     return this.usersService.findAll(req.query);
+  }
+
+  @Get('organized')
+  @RequirePermissions('users:read')
+  @ApiOperation({ summary: 'List CRM users across organizations (org-centric view)' })
+  findOrganized(@Req() req: FastifyRequest & { query: OrganizedUsersDto }) {
+    return this.usersService.findOrganized(req.query);
   }
 
   @Get(':id')

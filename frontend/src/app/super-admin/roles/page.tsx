@@ -246,7 +246,7 @@ function RoleManageDialog({ roleId, onClose }: { roleId: string; onClose: () => 
                         className={[
                           'flex items-center gap-2 px-2.5 py-1.5 rounded-md border text-xs cursor-pointer transition-colors',
                           checked
-                            ? 'border-sa-accent bg-red-500/10 text-sa-text'
+                            ? 'border-sa-accent bg-sa-accent-subtle text-sa-text'
                             : 'border-sa-border text-sa-text-muted hover:text-sa-text',
                         ].join(' ')}
                       >

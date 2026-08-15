@@ -23,14 +23,15 @@ export async function createTenant(input: {
   name: string;
   slug: string;
   email?: string;
+  initialPassword?: string;
   phone?: string;
   domain?: string;
   status?: string;
   maxUsers?: number;
   maxStorageGB?: number;
   notes?: string;
-}): Promise<Tenant> {
-  const res = await api.post<Tenant>('/tenants', input);
+}): Promise<Tenant & { adminUser?: { email: string; role: string; passwordSet: boolean } | null }> {
+  const res = await api.post<Tenant & { adminUser?: { email: string; role: string; passwordSet: boolean } | null }>('/tenants', input);
   return res.data;
 }
 
@@ -67,17 +68,6 @@ export async function restoreTenant(id: string): Promise<Tenant> {
   return res.data;
 }
 
-export async function impersonateTenant(id: string, reason?: string) {
-  const res = await api.post<{
-    grantId: string;
-    token: string;
-    expiresIn: string;
-    startedAt: string;
-    tenant: { id: string; name: string; slug: string; status: string };
-  }>(`/tenants/${id}/impersonate`, reason ? { reason } : {});
-  return res.data;
-}
-
 export async function getTenantUsers(
   id: string,
   params?: { page?: number; pageSize?: number },
@@ -96,40 +86,6 @@ export async function getTenantActivity(
     `/tenants/${id}/activity${buildQueryString(params)}`,
   );
   return { data: res.data, meta: res.meta! };
-}
-
-export async function getTenantImpersonations(
-  id: string,
-  params?: { page?: number; pageSize?: number },
-): Promise<Paginated<import('../types').ImpersonationLog>> {
-  const res = await api.get<import('../types').ImpersonationLog[]>(
-    `/tenants/${id}/impersonations${buildQueryString(params)}`,
-  );
-  return { data: res.data, meta: res.meta! };
-}
-
-export async function getImpersonations(
-  params?: { page?: number; pageSize?: number; active?: string },
-): Promise<Paginated<import('../types').ImpersonationLog>> {
-  const res = await api.get<import('../types').ImpersonationLog[]>(
-    `/impersonation${buildQueryString(params)}`,
-  );
-  return { data: res.data, meta: res.meta! };
-}
-
-export async function getActiveImpersonation() {
-  const res = await api.get<{ active: boolean } & Partial<import('../types').ImpersonationLog>>(
-    '/impersonation/active',
-  );
-  return res.data;
-}
-
-export async function exitImpersonation(reason?: string) {
-  const res = await api.post<{ success: boolean; ended: number }>(
-    '/impersonation/exit',
-    reason ? { reason } : {},
-  );
-  return res.data;
 }
 
 export async function getTenantRoles(
@@ -179,13 +135,25 @@ export async function createTenantUser(
     department?: string;
     designation?: string;
     role?: string;
+    password?: string;
     isActive?: boolean;
   },
-): Promise<{ id: string; email: string; name: string | null; role: string; isActive: boolean; createdAt: string }> {
-  const res = await api.post<{ id: string; email: string; name: string | null; role: string; isActive: boolean; createdAt: string }>(
-    `/tenants/${id}/users`,
-    input,
-  );
+): Promise<{
+  id: string;
+  email: string;
+  name: string | null;
+  role: string;
+  isActive: boolean;
+  createdAt: string;
+}> {
+  const res = await api.post<{
+    id: string;
+    email: string;
+    name: string | null;
+    role: string;
+    isActive: boolean;
+    createdAt: string;
+  }>(`/tenants/${id}/users`, input);
   return res.data;
 }
 
@@ -199,5 +167,90 @@ export async function createTenantRole(
 
 export async function getTenantAssignableRoles(id: string): Promise<{ id: string; name: string; code: string }[]> {
   const res = await api.get<{ id: string; name: string; code: string }[]>(`/tenants/${id}/roles/assignable`);
+  return res.data;
+}
+
+export async function getTenantUserRoles(id: string, userId: string): Promise<{ id: string; name: string; code: string }[]> {
+  const res = await api.get<{ id: string; name: string; code: string }[]>(`/tenants/${id}/users/${userId}/roles`);
+  return res.data;
+}
+
+export async function assignTenantUserRole(
+  id: string,
+  userId: string,
+  input: { roleId: string },
+): Promise<{ success: boolean; message: string }> {
+  const res = await api.post<{ success: boolean; message: string }>(`/tenants/${id}/users/${userId}/roles`, input);
+  return res.data;
+}
+
+export async function removeTenantUserRoles(
+  id: string,
+  userId: string,
+): Promise<{ success: boolean; message: string }> {
+  const res = await api.delete<{ success: boolean; message: string }>(`/tenants/${id}/users/${userId}/roles`);
+  return res.data;
+}
+
+export async function getTenantRole(id: string, roleId: string): Promise<import('../types').TenantRole> {
+  const res = await api.get<import('../types').TenantRole>(`/tenants/${id}/roles/${roleId}`);
+  return res.data;
+}
+
+export async function setTenantRolePermissions(
+  id: string,
+  roleId: string,
+  permissions: string[],
+): Promise<import('../types').TenantRole> {
+  const res = await api.put<import('../types').TenantRole>(`/tenants/${id}/roles/${roleId}/permissions`, {
+    permissions,
+  });
+  return res.data;
+}
+
+export async function getPermissionCatalog(id: string): Promise<Record<string, string[]>> {
+  const res = await api.get<Record<string, string[]>>(`/tenants/${id}/permissions/catalog`);
+  return res.data;
+}
+
+export interface UserPermissionOverrides {
+  userId: string;
+  email: string;
+  granted: string[];
+  denied: string[];
+}
+
+export async function getUserPermissions(id: string, userId: string): Promise<UserPermissionOverrides> {
+  const res = await api.get<UserPermissionOverrides>(`/tenants/${id}/users/${userId}/permissions`);
+  return res.data;
+}
+
+export async function setUserPermissions(
+  id: string,
+  userId: string,
+  input: { granted: string[]; denied: string[] },
+): Promise<UserPermissionOverrides> {
+  const res = await api.put<UserPermissionOverrides>(`/tenants/${id}/users/${userId}/permissions`, input);
+  return res.data;
+}
+
+export interface UserModuleOverrides {
+  userId: string;
+  email: string;
+  allowed: string[];
+  denied: string[];
+}
+
+export async function getUserModules(id: string, userId: string): Promise<UserModuleOverrides> {
+  const res = await api.get<UserModuleOverrides>(`/tenants/${id}/users/${userId}/modules`);
+  return res.data;
+}
+
+export async function setUserModules(
+  id: string,
+  userId: string,
+  input: { allowed: string[]; denied: string[] },
+): Promise<UserModuleOverrides> {
+  const res = await api.put<UserModuleOverrides>(`/tenants/${id}/users/${userId}/modules`, input);
   return res.data;
 }

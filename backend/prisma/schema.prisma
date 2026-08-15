@@ -121,7 +121,6 @@ model PlatformUser {
   refreshTokens         RefreshToken[]
   loginHistory          LoginAttempt[]
   auditLogs             PlatformAuditLog[]
-  impersonationsStarted ImpersonationLog[]     @relation("Impersonator")
 
   @@index([isActive])
   @@index([isDeleted])
@@ -310,7 +309,6 @@ model Tenant {
 
   moduleOverrides      TenantModuleOverride[]
   permissionGrants    TenantPermissionGrant[]
-  impersonations      ImpersonationLog[]
 
   @@index([status])
   @@index([isDeleted])
@@ -374,28 +372,6 @@ model TenantPermissionGrant {
   @@index([permissionId])
   @@index([expiresAt])
   @@map("tenant_permission_grants")
-}
-
-model ImpersonationLog {
-  id              String    @id @default(uuid())
-  superAdminId    String
-  superAdminEmail String
-  tenantId        String
-  targetUserId    String?
-  targetUserEmail String?
-  reason          String?
-  grantId         String?   @unique
-  startedAt       DateTime  @default(now())
-  endedAt         DateTime?
-  durationSeconds Int?
-  endedBy         String?
-
-  superAdmin PlatformUser @relation("Impersonator", fields: [superAdminId], references: [id])
-  tenant     Tenant       @relation(fields: [tenantId], references: [id])
-
-  @@index([tenantId, startedAt])
-  @@index([superAdminId, startedAt])
-  @@map("impersonation_logs")
 }
 
 // ----------------------------------------------------------------------------
@@ -541,7 +517,7 @@ model ApplicationLog {
 
 model SystemLog {
   id        String   @id @default(uuid())
-  component String // "auth", "tenant", "impersonation", "sync"
+  component String // "auth", "tenant", "sync"
   level     LogLevel @default(INFO)
   message   String
   metadata  Json?

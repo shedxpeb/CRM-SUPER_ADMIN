@@ -8,14 +8,13 @@ import { AdminKPICard } from '@/features/super-admin/components/AdminKPICard';
 import { LiveActivityFeed, ActivityItem } from '@/features/super-admin/components/LiveActivityFeed';
 import { SystemAlerts, SystemAlert } from '@/features/super-admin/components/SystemAlerts';
 import {
-  Building2, CheckCircle2, Ban, Users, Monitor, AlertTriangle,
+  Building2, CheckCircle2, Ban, Users, AlertTriangle,
   Server, Activity, Zap, FileText, ShieldCheck,
   TrendingUp,
 } from 'lucide-react';
 import {
   useTenants,
   useUsers,
-  useSessions,
   useSystemLogs,
 } from '@/lib/queries';
 import { ErrorState } from '@/components/sa/PageHeader';
@@ -28,7 +27,6 @@ const quickActions = [
   { label: 'Roles & Permissions', icon: ShieldCheck, color: 'text-green-500', bg: 'bg-green-500/10', href: '/super-admin/roles' },
   { label: 'Audit Logs', icon: FileText, color: 'text-yellow-500', bg: 'bg-yellow-500/10', href: '/super-admin/audit-logs' },
   { label: 'Health Checks', icon: Activity, color: 'text-orange-500', bg: 'bg-orange-500/10', href: '/super-admin/health-checks' },
-  { label: 'Sessions', icon: Monitor, color: 'text-cyan-500', bg: 'bg-cyan-500/10', href: '/super-admin/sessions' },
 ];
 
 function buildTenantGrowth(tenants: { createdAt: string }[], weeks = 12): { label: string; count: number }[] {
@@ -95,19 +93,17 @@ export default function SuperAdminPage() {
   const suspendedTenants = useTenants({ page: 1, pageSize: 1, status: 'SUSPENDED' });
   const growthTenants = useTenants({ page: 1, pageSize: 1000 });
   const users = useUsers({ page: 1, pageSize: 1 });
-  const sessions = useSessions({ page: 1, pageSize: 1 });
   const errorLogs = useSystemLogs({ page: 1, pageSize: 1, level: 'ERROR' });
   const allLogs = useSystemLogs({ page: 1, pageSize: 200 });
 
-  const error = tenants.error || users.error || sessions.error || errorLogs.error;
+  const error = tenants.error || users.error || errorLogs.error;
 
-  if (error) return <ErrorState message="Failed to load dashboard data" onRetry={() => { tenants.refetch(); users.refetch(); sessions.refetch(); errorLogs.refetch(); }} />;
+  if (error) return <ErrorState message="Failed to load dashboard data" onRetry={() => { tenants.refetch(); users.refetch(); errorLogs.refetch(); }} />;
 
   const totalTenants = tenants.data?.meta?.total ?? 0;
   const activeCount = activeTenants.data?.meta?.total ?? 0;
   const suspendedCount = suspendedTenants.data?.meta?.total ?? 0;
   const platformUsers = users.data?.meta?.total ?? 0;
-  const activeSessions = sessions.data?.meta?.total ?? 0;
   const criticalErrors = errorLogs.data?.meta?.total ?? 0;
 
   const sampledLogs = allLogs.data?.data ?? [];
@@ -119,14 +115,17 @@ export default function SuperAdminPage() {
   const hourlyVolume = buildHourlyVolume(sampledLogs);
   const componentHealth = buildComponentHealth(sampledLogs);
 
-  const activityFeed: ActivityItem[] = sampledLogs.slice(0, 10).map((log) => ({
-    id: log.id,
-    userName: log.component ?? 'system',
-    tenantName: 'Platform',
-    action: `${log.level} ${log.message.slice(0, 80)}`,
-    module: 'system',
-    time: timeAgo(log.createdAt),
-  }));
+  const activityFeed: ActivityItem[] = sampledLogs.slice(0, 10).map((log) => {
+    const meta = (log.metadata ?? {}) as Record<string, unknown>;
+    return {
+      id: log.id,
+      userName: typeof meta.actor === 'string' ? meta.actor : (log.component ?? 'system'),
+      tenantName: typeof meta.tenantName === 'string' ? meta.tenantName : 'Platform',
+      action: `${log.level} ${log.message.slice(0, 80)}`,
+      module: typeof meta.module === 'string' ? meta.module : (log.component ?? 'system'),
+      time: timeAgo(log.createdAt),
+    };
+  });
 
   const systemAlerts: SystemAlert[] = (allLogs.data?.data ?? []).map((log) => ({
     id: log.id,
@@ -150,7 +149,6 @@ export default function SuperAdminPage() {
         <AdminKPICard
           title="Total Tenants"
           value={totalTenants}
-          change={12}
           icon={<Building2 className="h-4 w-4" />}
           color="text-blue-500"
           onClick={() => { window.location.href = '/super-admin/tenants'; }}
@@ -158,7 +156,6 @@ export default function SuperAdminPage() {
         <AdminKPICard
           title="Active Tenants"
           value={activeCount}
-          change={8}
           icon={<CheckCircle2 className="h-4 w-4" />}
           color="text-green-500"
           onClick={() => { window.location.href = '/super-admin/tenants?status=ACTIVE'; }}
@@ -166,7 +163,6 @@ export default function SuperAdminPage() {
         <AdminKPICard
           title="Suspended"
           value={suspendedCount}
-          change={-3}
           icon={<Ban className="h-4 w-4" />}
           color="text-red-500"
           onClick={() => { window.location.href = '/super-admin/tenants?status=SUSPENDED'; }}
@@ -174,29 +170,19 @@ export default function SuperAdminPage() {
         <AdminKPICard
           title="Platform Users"
           value={platformUsers}
-          change={15}
           icon={<Users className="h-4 w-4" />}
           color="text-purple-500"
           onClick={() => { window.location.href = '/super-admin/users'; }}
         />
         <AdminKPICard
-          title="Active Sessions"
-          value={activeSessions}
-          change={5}
-          icon={<Monitor className="h-4 w-4" />}
-          color="text-cyan-500"
-        />
-        <AdminKPICard
           title="Platform Health"
           value={`${apiHealth}%`}
-          change={apiHealth >= 99 ? 0 : -2}
           icon={<Activity className="h-4 w-4" />}
           color={apiHealth >= 99 ? 'text-emerald-500' : apiHealth >= 95 ? 'text-yellow-500' : 'text-red-500'}
         />
         <AdminKPICard
           title="Critical Errors"
           value={criticalErrors}
-          change={0}
           icon={<AlertTriangle className="h-4 w-4" />}
           color="text-red-500"
           onClick={() => { window.location.href = '/super-admin/errors'; }}

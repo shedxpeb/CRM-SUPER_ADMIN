@@ -251,11 +251,13 @@ export class AuthService {
         mustChangePassword: true,
         lastLoginAt: true,
         createdAt: true,
-        roles: { select: { role: { select: { name: true, id: true } } } },
       },
     });
     if (!user) throw new UnauthorizedException('User not found');
-    return user;
+    // Return the same flat contract as login (roles: string[], permissions:
+    // string[]) so client-side guards (hasRole/can) work after hard reloads.
+    const profile = await this.buildAuthUser(user.id, user.email, user.name);
+    return { ...user, roles: profile.roles, permissions: profile.permissions };
   }
 
   async changePassword(

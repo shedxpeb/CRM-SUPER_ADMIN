@@ -77,11 +77,6 @@ export async function resetPassword(id: string, newPassword: string): Promise<{ 
   return res.data;
 }
 
-export async function getUserSessions(id: string): Promise<{ items: import('../types').PlatformSession[] }> {
-  const res = await api.get<{ items: import('../types').PlatformSession[] }>(`/users/${id}/sessions`);
-  return res.data;
-}
-
 // ── Roles & Permissions ──────────────────────────────────────────────────────
 
 export async function getRoles(params?: {
@@ -139,4 +134,45 @@ export async function getPermissions(params?: {
 }): Promise<Paginated<Permission>> {
   const res = await api.get<Permission[]>(`/permissions${buildQueryString(params)}`);
   return { data: res.data, meta: res.meta! };
+}
+
+export interface OrganizedUser {
+  id: string;
+  email: string;
+  name: string | null;
+  role: string;
+  isActive: boolean;
+  isLocked: boolean;
+  lastLogin: string | null;
+  department: string | null;
+  designation: string | null;
+  mobile: string | null;
+  createdAt: string;
+  updatedAt: string;
+  organizationId: string | null;
+  organizationName: string;
+  tenantId: string | null;
+  tenantStatus: string | null;
+}
+
+export interface OrganizedUsersResponse {
+  items: OrganizedUser[];
+  meta: {
+    total: number;
+    page: number;
+    pageSize: number;
+    organizations?: { id: string; name: string; status: string }[];
+  };
+}
+
+export async function getOrganizedUsers(params?: {
+  page?: number;
+  pageSize?: number;
+  organizationId?: string;
+  role?: string;
+  status?: 'active' | 'inactive';
+  q?: string;
+}): Promise<OrganizedUsersResponse> {
+  const res = await api.get<OrganizedUser[]>(`/users/organized${buildQueryString(params)}`);
+  return { items: res.data, meta: res.meta! };
 }

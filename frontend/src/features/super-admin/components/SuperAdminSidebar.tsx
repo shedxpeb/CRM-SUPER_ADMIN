@@ -8,7 +8,6 @@ import {
   Building2,
   Users,
   ShieldCheck,
-  KeySquare,
   FileText,
   AlertTriangle,
   HeartPulse,
@@ -17,10 +16,6 @@ import {
   Menu,
   X,
   Settings,
-  LogIn,
-  Ban,
-  Monitor,
-  Clock,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -55,13 +50,8 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: 'Identity & Access',
     items: [
-      { name: 'Impersonation', icon: LogIn, path: '/super-admin/impersonation', requiredPermission: 'impersonation:execute' },
       { name: 'Users', icon: Users, path: '/super-admin/users', requiredPermission: 'users:read' },
       { name: 'Roles', icon: ShieldCheck, path: '/super-admin/roles', requiredPermission: 'roles:read' },
-      { name: 'Permissions', icon: KeySquare, path: '/super-admin/permissions', requiredPermission: 'permissions:read' },
-      { name: 'Sessions', icon: Monitor, path: '/super-admin/sessions', requiredPermission: 'sessions:read' },
-      { name: 'Login Attempts', icon: Clock, path: '/super-admin/login-attempts', requiredPermission: 'security:read' },
-      { name: 'Blocked IPs', icon: Ban, path: '/super-admin/blocked-ips', requiredPermission: 'security:write' },
     ],
   },
   {
@@ -106,8 +96,8 @@ export const SuperAdminSidebar = memo(function SuperAdminSidebar() {
       <div className="h-16 flex items-center justify-between px-4 border-b border-sa-border">
         {!collapsed && (
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 bg-gradient-to-br from-red-500 to-red-700 rounded-lg flex items-center justify-center shadow-lg shadow-red-900/30">
-              <LayoutDashboard className="h-4.5 w-4.5 text-sa-text" />
+            <div className="w-9 h-9 bg-gradient-to-br from-sa-accent-bold to-sa-accent rounded-lg flex items-center justify-center shadow-lg shadow-sa-accent/30">
+              <LayoutDashboard className="h-4.5 w-4.5 text-white" />
             </div>
             <div>
               <span className="font-bold text-sa-text text-sm block leading-tight">Super Admin</span>
@@ -154,7 +144,7 @@ export const SuperAdminSidebar = memo(function SuperAdminSidebar() {
                       className={cn(
                         'flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 group',
                         active
-                          ? 'bg-gradient-to-r from-red-600/20 to-red-600/5 text-red-400 font-medium'
+                          ? 'bg-gradient-to-r from-sa-accent-subtle to-sa-accent-subtle/40 text-sa-accent font-medium'
                           : 'text-sa-text-muted hover:bg-sa-border/50 hover:text-sa-text-secondary',
                         collapsed && 'justify-center',
                       )}
@@ -163,11 +153,11 @@ export const SuperAdminSidebar = memo(function SuperAdminSidebar() {
                       <Icon
                         className={cn(
                           'h-[18px] w-[18px] shrink-0 transition-colors',
-                          active ? 'text-red-400' : 'text-sa-text-dim group-hover:text-sa-text-muted',
+                          active ? 'text-sa-accent' : 'text-sa-text-dim group-hover:text-sa-text-muted',
                         )}
                       />
                       {!collapsed && <span className={cn(componentTextSizes.nav.item)}>{item.name}</span>}
-                      {active && !collapsed && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-red-400" />}
+                      {active && !collapsed && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-sa-accent" />}
                     </Link>
                   );
                 })}

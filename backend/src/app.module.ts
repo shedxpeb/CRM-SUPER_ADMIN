@@ -19,7 +19,6 @@ import { RolesModule } from './modules/roles/roles.module';
 import { PermissionsModule } from './modules/permissions/permissions.module';
 import { TenantsModule } from './modules/tenants/tenants.module';
 import { MonitoringModule } from './modules/monitoring/monitoring.module';
-import { ImpersonationModule } from './modules/impersonation/impersonation.module';
 import { SecurityModule } from './modules/security/security.module';
 import { PlatformModule } from './modules/platform/platform.module';
 
@@ -47,7 +46,6 @@ import { PlatformModule } from './modules/platform/platform.module';
     PermissionsModule,
     TenantsModule,
     MonitoringModule,
-    ImpersonationModule,
     SecurityModule,
     PlatformModule,
   ],

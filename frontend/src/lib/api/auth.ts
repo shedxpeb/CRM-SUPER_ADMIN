@@ -1,5 +1,4 @@
-import { api, buildQueryString } from '../api';
-import type { LoginAttempt } from '../types';
+import { api } from '../api';
 
 // ── Auth ─────────────────────────────────────────────────────────────────────
 
@@ -22,14 +21,3 @@ export async function logout() {
   await api.post('/auth/logout');
 }
 
-// ── Login attempts (security) ────────────────────────────────────────────────
-
-export async function getLoginAttempts(params?: {
-  page?: number;
-  pageSize?: number;
-  email?: string;
-  success?: string;
-}) {
-  const res = await api.get<LoginAttempt[]>(`/security/login-attempts${buildQueryString(params)}`);
-  return { data: res.data, meta: res.meta };
-}

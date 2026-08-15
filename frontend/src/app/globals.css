@@ -1,23 +1,53 @@
 @import "tailwindcss";
 
+/* ─────────────────────────────────────────────────────────────────────────────
+   PEB Control Plane — Atlassian Design System palette
+   Primary: Atlantis Blue. Surfaces and text follow the ADS dark/light scales.
+   Tokens are declared as runtime variables (--sa-*) so the theme switcher can
+   re-theme the whole app, and mapped into Tailwind's theme namespace via
+   @theme inline so every utility class (bg-sa-card, text-sa-text, bg-primary,
+   text-muted-foreground, ...) actually generates.
+   ─────────────────────────────────────────────────────────────────────────── */
+
 :root,
 [data-sa-theme="dark"] {
-  --sa-sidebar: #0f0f13;
-  --sa-card: #16161d;
-  --sa-card-hover: #1c1c26;
-  --sa-card-solid: #1a1a24;
-  --sa-border: #1e1e2a;
-  --sa-border-solid: #2a2a3a;
-  --sa-input: #12121a;
-  --sa-text: #e8e8ed;
-  --sa-text-secondary: #c4c4cf;
-  --sa-text-muted: #8888a0;
-  --sa-text-dim: #5a5a72;
-  --sa-accent: #ef4444;
-  --sa-header-bg: #0d0d12;
-  --sa-row-hover: #1a1a26;
-  --sa-chart-bg: #13131c;
-  --sa-overlay: rgba(0, 0, 0, 0.6);
+  /* App chrome */
+  --sa-sidebar: #161a1d;
+  --sa-header-bg: #1d2125;
+  --sa-background: #1d2125;
+
+  /* Surfaces (ADS dark) */
+  --sa-card: #22272b;
+  --sa-card-hover: #282e33;
+  --sa-card-solid: #2d3338;
+  --sa-chart-bg: #1c2024;
+
+  /* Lines */
+  --sa-border: #33393f;
+  --sa-border-solid: #454f59;
+
+  /* Fields */
+  --sa-input: #1d2125;
+
+  /* Text (ADS dark text scale) */
+  --sa-text: #e6e8eb;
+  --sa-text-secondary: #b6c2cf;
+  --sa-text-muted: #9fadbc;
+  --sa-text-dim: #6b7785;
+
+  /* Brand accent — Atlantis blue */
+  --sa-accent: #579dff;
+  --sa-accent-bold: #388bff;
+  --sa-accent-subtle: #09326c;
+
+  /* Semantic (ADS) */
+  --sa-success: #4bce97;
+  --sa-warning: #f5cd47;
+  --sa-danger: #f15b50;
+
+  /* Misc */
+  --sa-row-hover: #282e33;
+  --sa-overlay: rgba(9, 14, 18, 0.72);
   --z-modal-overlay: 40;
   --z-dialog: 50;
   --z-dropdown: 60;
@@ -26,41 +56,124 @@
 }
 
 [data-sa-theme="light"] {
-  --sa-sidebar: #f8f9fa;
+  /* App chrome */
+  --sa-sidebar: #f7f8f9;
+  --sa-header-bg: #ffffff;
+  --sa-background: #ffffff;
+
+  /* Surfaces (ADS light) */
   --sa-card: #ffffff;
-  --sa-card-hover: #f3f4f6;
-  --sa-card-solid: #f0f1f3;
-  --sa-border: #e5e7eb;
-  --sa-border-solid: #d1d5db;
-  --sa-input: #f9fafb;
-  --sa-text: #111827;
-  --sa-text-secondary: #374151;
-  --sa-text-muted: #6b7280;
-  --sa-text-dim: #9ca3af;
-  --sa-accent: #dc2626;
-  --sa-header-bg: #f3f4f6;
-  --sa-row-hover: #f9fafb;
-  --sa-chart-bg: #f8f9fa;
-  --sa-overlay: rgba(0, 0, 0, 0.3);
+  --sa-card-hover: #f1f2f4;
+  --sa-card-solid: #f7f8f9;
+  --sa-chart-bg: #f7f8f9;
+
+  /* Lines */
+  --sa-border: #ebecf0;
+  --sa-border-solid: #c1c7d0;
+
+  /* Fields */
+  --sa-input: #ffffff;
+
+  /* Text (ADS light text scale) */
+  --sa-text: #172b4d;
+  --sa-text-secondary: #44546f;
+  --sa-text-muted: #626f86;
+  --sa-text-dim: #8c9cb8;
+
+  /* Brand accent — Atlantis blue */
+  --sa-accent: #0c66e4;
+  --sa-accent-bold: #0052cc;
+  --sa-accent-subtle: #e9f2ff;
+
+  /* Semantic (ADS) */
+  --sa-success: #216e4e;
+  --sa-warning: #a54800;
+  --sa-danger: #ae2a19;
+
+  --sa-row-hover: #f1f2f4;
+  --sa-overlay: rgba(9, 30, 66, 0.42);
 }
 
 [data-sa-theme="sky"] {
-  --sa-sidebar: #0c1929;
-  --sa-card: #0f1f33;
-  --sa-card-hover: #13273f;
-  --sa-card-solid: #0e1e30;
-  --sa-border: #1a2d45;
-  --sa-border-solid: #25405e;
-  --sa-input: #0b1828;
+  /* Deep blue-tinted surfaces */
+  --sa-sidebar: #0d1b2a;
+  --sa-header-bg: #10233a;
+  --sa-background: #10233a;
+
+  --sa-card: #142a42;
+  --sa-card-hover: #19304c;
+  --sa-card-solid: #1a3350;
+  --sa-chart-bg: #0f2438;
+
+  --sa-border: #1e3a57;
+  --sa-border-solid: #2c4c70;
+
+  --sa-input: #0d1b2a;
+
   --sa-text: #dce8f5;
-  --sa-text-secondary: #b8cce0;
-  --sa-text-muted: #6e8ba8;
-  --sa-text-dim: #4a6680;
-  --sa-accent: #3b82f6;
-  --sa-header-bg: #091421;
-  --sa-row-hover: #112438;
-  --sa-chart-bg: #0d1c2e;
-  --sa-overlay: rgba(0, 0, 0, 0.6);
+  --sa-text-secondary: #b6c8db;
+  --sa-text-muted: #7d97b0;
+  --sa-text-dim: #55708a;
+
+  --sa-accent: #4c9aff;
+  --sa-accent-bold: #2f7ce6;
+  --sa-accent-subtle: #123a63;
+
+  --sa-success: #4bce97;
+  --sa-warning: #f5cd47;
+  --sa-danger: #f15b50;
+
+  --sa-row-hover: #19304c;
+  --sa-overlay: rgba(6, 14, 24, 0.72);
+}
+
+/* ── Map runtime tokens into the Tailwind theme namespace ─────────────────────
+   @theme inline keeps the utility pointing at var(--sa-*) so the active theme
+   (light / sky / dark) is respected at runtime. Without this block, classes
+   like bg-sa-card and text-sa-text generate nothing. */
+@theme inline {
+  --color-sa-sidebar: var(--sa-sidebar);
+  --color-sa-header-bg: var(--sa-header-bg);
+  --color-sa-background: var(--sa-background);
+  --color-sa-card: var(--sa-card);
+  --color-sa-card-hover: var(--sa-card-hover);
+  --color-sa-card-solid: var(--sa-card-solid);
+  --color-sa-chart-bg: var(--sa-chart-bg);
+  --color-sa-border: var(--sa-border);
+  --color-sa-border-solid: var(--sa-border-solid);
+  --color-sa-input: var(--sa-input);
+  --color-sa-text: var(--sa-text);
+  --color-sa-text-secondary: var(--sa-text-secondary);
+  --color-sa-text-muted: var(--sa-text-muted);
+  --color-sa-text-dim: var(--sa-text-dim);
+  --color-sa-accent: var(--sa-accent);
+  --color-sa-accent-bold: var(--sa-accent-bold);
+  --color-sa-accent-subtle: var(--sa-accent-subtle);
+  --color-sa-success: var(--sa-success);
+  --color-sa-warning: var(--sa-warning);
+  --color-sa-danger: var(--sa-danger);
+  --color-sa-row-hover: var(--sa-row-hover);
+
+  /* shadcn/ui aliases used across the app */
+  --color-background: var(--sa-background);
+  --color-foreground: var(--sa-text);
+  --color-card: var(--sa-card);
+  --color-card-foreground: var(--sa-text);
+  --color-popover: var(--sa-card);
+  --color-popover-foreground: var(--sa-text);
+  --color-primary: var(--sa-accent);
+  --color-primary-foreground: #ffffff;
+  --color-secondary: var(--sa-card-solid);
+  --color-secondary-foreground: var(--sa-text-secondary);
+  --color-muted: var(--sa-chart-bg);
+  --color-muted-foreground: var(--sa-text-muted);
+  --color-accent: var(--sa-card-hover);
+  --color-accent-foreground: var(--sa-text);
+  --color-destructive: var(--sa-danger);
+  --color-destructive-foreground: #ffffff;
+  --color-border: var(--sa-border);
+  --color-input: var(--sa-border);
+  --color-ring: var(--sa-accent);
 }
 
 * {
@@ -68,14 +181,14 @@
 }
 
 html {
-  background: var(--sa-sidebar);
+  background: var(--sa-background);
   color: var(--sa-text);
 }
 
 body {
   margin: 0;
   padding: 0;
-  background: var(--sa-sidebar);
+  background: var(--sa-background);
   color: var(--sa-text);
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -151,11 +264,6 @@ body {
 
 .animate-pulse {
   animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-}
-
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
 }
 
 .animate-spin {

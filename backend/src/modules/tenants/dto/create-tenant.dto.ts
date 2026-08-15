@@ -21,9 +21,13 @@ export class CreateTenantDto {
   @Matches(/^[a-z0-9-]+$/, { message: 'slug must be lowercase alphanumeric with dashes' })
   slug: string;
 
-  @IsOptional()
   @IsEmail()
-  email?: string;
+  email: string;
+
+  @IsOptional()
+  @IsString()
+  @Length(8, 72)
+  initialPassword?: string;
 
   @IsOptional()
   @IsString()

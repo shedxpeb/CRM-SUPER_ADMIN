@@ -3,25 +3,18 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as tenantsApi from './api/tenants';
 import * as iamApi from './api/iam';
-import * as securityApi from './api/security';
 import * as monitoringApi from './api/monitoring';
 import * as platformApi from './api/platform';
-import * as authApi from './api/auth';
 
 export const qk = {
   tenants: (params?: unknown) => ['tenants', params] as const,
   tenant: (id: string) => ['tenants', id] as const,
   tenantActivity: (id: string, params?: unknown) => ['tenants', id, 'activity', params] as const,
-  tenantImpersonations: (id: string, params?: unknown) =>
-    ['tenants', id, 'impersonations', params] as const,
   tenantUsers: (id: string, params?: unknown) => ['tenants', id, 'users', params] as const,
   tenantRoles: (id: string, params?: unknown) => ['tenants', id, 'roles', params] as const,
   tenantLoginHistory: (id: string, params?: unknown) => ['tenants', id, 'login-history', params] as const,
   tenantModules: (id: string) => ['tenants', id, 'modules'] as const,
   tenantPermissions: (id: string) => ['tenants', id, 'permissions'] as const,
-  impersonations: (params?: unknown) => ['impersonation', params] as const,
-  activeImpersonation: () => ['impersonation', 'active'] as const,
-
   users: (params?: unknown) => ['users', params] as const,
   user: (id: string) => ['users', id] as const,
   userSessions: (id: string) => ['users', id, 'sessions'] as const,
@@ -30,14 +23,11 @@ export const qk = {
   roleUsers: (id: string) => ['roles', id, 'users'] as const,
   permissions: (params?: unknown) => ['permissions', params] as const,
 
-  blockedIps: (params?: unknown) => ['blocked-ips', params] as const,
-  sessions: (params?: unknown) => ['sessions', params] as const,
-  loginAttempts: (params?: unknown) => ['login-attempts', params] as const,
-
   auditLogs: (params?: unknown) => ['audit-logs', params] as const,
   systemLogs: (params?: unknown) => ['monitoring', 'system-logs', params] as const,
 
   settings: (params?: unknown) => ['platform', 'settings', params] as const,
+  moduleCatalog: () => ['platform', 'modules'] as const,
 };
 
 // ── Tenants ──────────────────────────────────────────────────────────────────
@@ -69,14 +59,6 @@ export function useTenantUsers(id: string, params?: { page?: number; pageSize?: 
   return useQuery({
     queryKey: qk.tenantUsers(id, params),
     queryFn: () => tenantsApi.getTenantUsers(id, params),
-    enabled: !!id,
-  });
-}
-
-export function useTenantImpersonations(id: string, params?: { page?: number; pageSize?: number }) {
-  return useQuery({
-    queryKey: qk.tenantImpersonations(id, params),
-    queryFn: () => tenantsApi.getTenantImpersonations(id, params),
     enabled: !!id,
   });
 }
@@ -127,11 +109,131 @@ export function useTenantPermissions(tenantId: string) {
   });
 }
 
+export function usePermissionCatalog(tenantId: string) {
+  return useQuery({
+    queryKey: ['tenants', tenantId, 'permissions', 'catalog'] as const,
+    queryFn: () => tenantsApi.getPermissionCatalog(tenantId),
+    enabled: !!tenantId,
+  });
+}
+
+export function useUserRoles(tenantId: string, userId: string | null) {
+  return useQuery({
+    queryKey: ['tenants', tenantId, 'users', userId, 'roles'] as const,
+    queryFn: () => tenantsApi.getTenantUserRoles(tenantId, userId!),
+    enabled: !!tenantId && !!userId,
+  });
+}
+
+export function useAssignTenantUserRole() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, userId, roleId }: { id: string; userId: string; roleId: string }) =>
+      tenantsApi.assignTenantUserRole(id, userId, { roleId }),
+    onSuccess: (_data, { id, userId }) => {
+      qc.invalidateQueries({ queryKey: ['tenants', id, 'users', userId, 'roles'] });
+      qc.invalidateQueries({ queryKey: ['tenants', id, 'users'] });
+    },
+  });
+}
+
+export function useRemoveTenantUserRoles() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, userId }: { id: string; userId: string }) =>
+      tenantsApi.removeTenantUserRoles(id, userId),
+    onSuccess: (_data, { id, userId }) => {
+      qc.invalidateQueries({ queryKey: ['tenants', id, 'users', userId, 'roles'] });
+      qc.invalidateQueries({ queryKey: ['tenants', id, 'users'] });
+    },
+  });
+}
+
+export function useUserPermissions(tenantId: string, userId: string | null) {
+  return useQuery({
+    queryKey: ['tenants', tenantId, 'users', userId, 'permissions'] as const,
+    queryFn: () => tenantsApi.getUserPermissions(tenantId, userId!),
+    enabled: !!tenantId && !!userId,
+  });
+}
+
+export function useSetUserPermissions() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      userId,
+      input,
+    }: {
+      id: string;
+      userId: string;
+      input: { granted: string[]; denied: string[] };
+    }) => tenantsApi.setUserPermissions(id, userId, input),
+    onSuccess: (_data, { id, userId }) => {
+      qc.invalidateQueries({ queryKey: ['tenants', id, 'users', userId, 'permissions'] });
+    },
+  });
+}
+
+export function useUserModules(tenantId: string, userId: string | null) {
+  return useQuery({
+    queryKey: ['tenants', tenantId, 'users', userId, 'modules'] as const,
+    queryFn: () => tenantsApi.getUserModules(tenantId, userId!),
+    enabled: !!tenantId && !!userId,
+  });
+}
+
+export function useSetUserModules() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      userId,
+      input,
+    }: {
+      id: string;
+      userId: string;
+      input: { allowed: string[]; denied: string[] };
+    }) => tenantsApi.setUserModules(id, userId, input),
+    onSuccess: (_data, { id, userId }) => {
+      qc.invalidateQueries({ queryKey: ['tenants', id, 'users', userId, 'modules'] });
+    },
+  });
+}
+
 export function useTenantAssignableRoles(id: string) {
   return useQuery({
     queryKey: ['tenants', id, 'roles', 'assignable'] as const,
     queryFn: () => tenantsApi.getTenantAssignableRoles(id),
     enabled: !!id,
+  });
+}
+
+export function useTenantRole(id: string, roleId: string | null) {
+  return useQuery({
+    queryKey: ['tenants', id, 'roles', roleId] as const,
+    queryFn: () => tenantsApi.getTenantRole(id, roleId!),
+    enabled: !!id && !!roleId,
+  });
+}
+
+export function useSetTenantRolePermissions() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      roleId,
+      permissions,
+    }: {
+      id: string;
+      roleId: string;
+      permissions: string[];
+    }) => tenantsApi.setTenantRolePermissions(id, roleId, permissions),
+    onSuccess: (_data, { id, roleId }) => {
+      qc.invalidateQueries({ queryKey: ['tenants', id, 'roles'] });
+      qc.invalidateQueries({ queryKey: ['tenants', id, 'roles', roleId] });
+      qc.invalidateQueries({ queryKey: ['tenants', id, 'permissions'] });
+    },
   });
 }
 
@@ -154,21 +256,6 @@ export function useCreateTenantRole() {
     onSuccess: (_data, { id }) => {
       qc.invalidateQueries({ queryKey: ['tenants', id, 'roles'] });
     },
-  });
-}
-
-export function useImpersonations(params?: { page?: number; pageSize?: number; active?: string }) {
-  return useQuery({
-    queryKey: qk.impersonations(params),
-    queryFn: () => tenantsApi.getImpersonations(params),
-  });
-}
-
-export function useActiveImpersonation() {
-  return useQuery({
-    queryKey: qk.activeImpersonation(),
-    queryFn: () => tenantsApi.getActiveImpersonation(),
-    refetchInterval: 30_000,
   });
 }
 
@@ -244,28 +331,21 @@ export function useUnsuspendTenant() {
   });
 }
 
-export function useImpersonateTenant() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, reason }: { id: string; reason?: string }) => tenantsApi.impersonateTenant(id, reason),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['impersonation'] });
-    },
-  });
-}
-
-export function useExitImpersonation() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (reason?: string) => tenantsApi.exitImpersonation(reason),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['impersonation'] }),
-  });
-}
-
 // ── Identity & Access ────────────────────────────────────────────────────────
 
 export function useUsers(params?: { page?: number; pageSize?: number; q?: string; roleId?: string; status?: string }) {
   return useQuery({ queryKey: qk.users(params), queryFn: () => iamApi.getUsers(params) });
+}
+
+export function useOrganizedUsers(params?: {
+  page?: number;
+  pageSize?: number;
+  organizationId?: string;
+  role?: string;
+  status?: 'active' | 'inactive';
+  q?: string;
+}) {
+  return useQuery({ queryKey: ['users', 'organized', params] as const, queryFn: () => iamApi.getOrganizedUsers(params) });
 }
 
 export function useCreateUser() {
@@ -424,56 +504,6 @@ export function useAssignRolePermissions() {
   });
 }
 
-// ── Security ─────────────────────────────────────────────────────────────────
-
-export function useBlockedIps(params?: { page?: number; pageSize?: number; active?: boolean | string }) {
-  return useQuery({
-    queryKey: qk.blockedIps(params),
-    queryFn: () => securityApi.getBlockedIps(params),
-  });
-}
-
-export function useSessions(params?: { page?: number; pageSize?: number }) {
-  return useQuery({
-    queryKey: qk.sessions(params),
-    queryFn: () => securityApi.getSessions(params),
-  });
-}
-
-export function useLoginAttempts(params?: { page?: number; pageSize?: number; email?: string }) {
-  return useQuery({
-    queryKey: qk.loginAttempts(params),
-    queryFn: () => authApi.getLoginAttempts(params),
-  });
-}
-
-export function useCreateBlockedIp() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: securityApi.createBlockedIp,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['blocked-ips'] }),
-  });
-}
-
-export function useUnblockIp() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: securityApi.unblockIp,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['blocked-ips'] }),
-  });
-}
-
-export function useRevokeSession() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: securityApi.revokeSession,
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['sessions'] });
-      qc.invalidateQueries({ queryKey: ['users'] });
-    },
-  });
-}
-
 // ── Monitoring ───────────────────────────────────────────────────────────────
 
 export function useAuditLogs(params?: {
@@ -511,6 +541,13 @@ export function useErrors(params?: {
 }
 
 // ── Platform Config ──────────────────────────────────────────────────────────
+
+export function useModuleCatalog() {
+  return useQuery({
+    queryKey: qk.moduleCatalog(),
+    queryFn: () => platformApi.getModuleCatalog(),
+  });
+}
 
 export function usePlatformSettings(params?: { page?: number; pageSize?: number; category?: string }) {
   return useQuery({

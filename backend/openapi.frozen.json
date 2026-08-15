@@ -1,1 +1,3146 @@
-﻿{"openapi":"3.0.0","paths":{"/api/v1/health":{"get":{"operationId":"HealthController_check","parameters":[],"responses":{"200":{"description":"The Health Check is successful","content":{"application/json":{"schema":{"type":"object","properties":{"status":{"type":"string","example":"ok"},"info":{"type":"object","example":{"database":{"status":"up"}},"additionalProperties":{"type":"object","required":["status"],"properties":{"status":{"type":"string"}},"additionalProperties":true},"nullable":true},"error":{"type":"object","example":{},"additionalProperties":{"type":"object","required":["status"],"properties":{"status":{"type":"string"}},"additionalProperties":true},"nullable":true},"details":{"type":"object","example":{"database":{"status":"up"}},"additionalProperties":{"type":"object","required":["status"],"properties":{"status":{"type":"string"}},"additionalProperties":true}}}}}}},"503":{"description":"The Health Check is not successful","content":{"application/json":{"schema":{"type":"object","properties":{"status":{"type":"string","example":"error"},"info":{"type":"object","example":{"database":{"status":"up"}},"additionalProperties":{"type":"object","required":["status"],"properties":{"status":{"type":"string"}},"additionalProperties":true},"nullable":true},"error":{"type":"object","example":{"redis":{"status":"down","message":"Could not connect"}},"additionalProperties":{"type":"object","required":["status"],"properties":{"status":{"type":"string"}},"additionalProperties":true},"nullable":true},"details":{"type":"object","example":{"database":{"status":"up"},"redis":{"status":"down","message":"Could not connect"}},"additionalProperties":{"type":"object","required":["status"],"properties":{"status":{"type":"string"}},"additionalProperties":true}}}}}}}},"tags":["Health"]}},"/api/v1/health/db":{"get":{"operationId":"HealthController_db","parameters":[],"responses":{"200":{"description":""}},"tags":["Health"]}},"/api/v1/auth/login":{"post":{"operationId":"AuthController_login","parameters":[],"requestBody":{"required":true,"content":{"application/json":{"schema":{"$ref":"#/components/schemas/LoginDto"}}}},"responses":{"201":{"description":""}},"summary":"Log in a platform user","tags":["auth"]}},"/api/v1/auth/refresh":{"post":{"operationId":"AuthController_refresh","parameters":[],"requestBody":{"required":true,"content":{"application/json":{"schema":{"$ref":"#/components/schemas/RefreshTokenDto"}}}},"responses":{"201":{"description":""}},"summary":"Refresh access token using a refresh token","tags":["auth"]}},"/api/v1/auth/logout":{"post":{"operationId":"AuthController_logout","parameters":[],"responses":{"201":{"description":""}},"summary":"Log out and revoke the current session","tags":["auth"]}},"/api/v1/auth/me":{"get":{"operationId":"AuthController_me","parameters":[],"responses":{"200":{"description":""}},"summary":"Get the current user profile","tags":["auth"]}},"/api/v1/auth/change-password":{"post":{"operationId":"AuthController_changePassword","parameters":[],"requestBody":{"required":true,"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ChangePasswordDto"}}}},"responses":{"201":{"description":""}},"summary":"Change the current password","tags":["auth"]}},"/api/v1/auth/forgot-password":{"post":{"operationId":"AuthController_forgotPassword","parameters":[],"requestBody":{"required":true,"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ForgotPasswordDto"}}}},"responses":{"201":{"description":""}},"summary":"Request a password reset link","tags":["auth"]}},"/api/v1/auth/reset-password":{"post":{"operationId":"AuthController_resetPassword","parameters":[],"requestBody":{"required":true,"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ResetPasswordDto"}}}},"responses":{"201":{"description":""}},"summary":"Reset the password using a reset token","tags":["auth"]}},"/api/v1/users":{"get":{"operationId":"UsersController_findAll","parameters":[],"responses":{"200":{"description":""}},"summary":"List platform users","tags":["users"]},"post":{"operationId":"UsersController_create","parameters":[],"requestBody":{"required":true,"content":{"application/json":{"schema":{"$ref":"#/components/schemas/CreateUserDto"}}}},"responses":{"201":{"description":""}},"summary":"Create a platform user","tags":["users"]}},"/api/v1/users/{id}":{"get":{"operationId":"UsersController_findOne","parameters":[{"name":"id","required":true,"in":"path","schema":{"type":"string"}}],"responses":{"200":{"description":""}},"summary":"Get a platform user by id","tags":["users"]},"patch":{"operationId":"UsersController_update","parameters":[{"name":"id","required":true,"in":"path","schema":{"type":"string"}}],"requestBody":{"required":true,"content":{"application/json":{"schema":{"$ref":"#/components/schemas/UpdateUserDto"}}}},"responses":{"200":{"description":""}},"summary":"Update a platform user","tags":["users"]},"delete":{"operationId":"UsersController_remove","parameters":[{"name":"id","required":true,"in":"path","schema":{"type":"string"}}],"responses":{"200":{"description":""}},"summary":"Soft-delete a platform user","tags":["users"]}},"/api/v1/users/{id}/restore":{"post":{"operationId":"UsersController_restore","parameters":[{"name":"id","required":true,"in":"path","schema":{"type":"string"}}],"responses":{"201":{"description":""}},"summary":"Restore a soft-deleted platform user","tags":["users"]}},"/api/v1/users/{id}/suspend":{"post":{"operationId":"UsersController_suspend","parameters":[{"name":"id","required":true,"in":"path","schema":{"type":"string"}}],"requestBody":{"required":true,"content":{"application/json":{"schema":{"$ref":"#/components/schemas/SuspendUserDto"}}}},"responses":{"201":{"description":""}},"summary":"Suspend a platform user","tags":["users"]}},"/api/v1/users/{id}/unsuspend":{"post":{"operationId":"UsersController_unsuspend","parameters":[{"name":"id","required":true,"in":"path","schema":{"type":"string"}}],"responses":{"201":{"description":""}},"summary":"Unsuspend a platform user","tags":["users"]}},"/api/v1/users/{id}/reset-password":{"post":{"operationId":"UsersController_resetPassword","parameters":[{"name":"id","required":true,"in":"path","schema":{"type":"string"}}],"requestBody":{"required":true,"content":{"application/json":{"schema":{"$ref":"#/components/schemas/AdminResetPasswordDto"}}}},"responses":{"201":{"description":""}},"summary":"Reset a platform user password","tags":["users"]}},"/api/v1/users/{id}/force-logout":{"post":{"operationId":"UsersController_forceLogout","parameters":[{"name":"id","required":true,"in":"path","schema":{"type":"string"}}],"responses":{"201":{"description":""}},"summary":"Terminate all sessions for a user","tags":["users"]}},"/api/v1/users/{id}/sessions":{"get":{"operationId":"UsersController_getSessions","parameters":[{"name":"id","required":true,"in":"path","schema":{"type":"string"}}],"responses":{"200":{"description":""}},"summary":"List a user active sessions","tags":["users"]}},"/api/v1/users/{id}/login-history":{"get":{"operationId":"UsersController_getLoginHistory","parameters":[{"name":"id","required":true,"in":"path","schema":{"type":"string"}}],"responses":{"200":{"description":""}},"summary":"List a user login history","tags":["users"]}},"/api/v1/roles":{"get":{"operationId":"RolesController_findAll","parameters":[],"responses":{"200":{"description":""}},"summary":"List platform roles","tags":["roles"]},"post":{"operationId":"RolesController_create","parameters":[],"requestBody":{"required":true,"content":{"application/json":{"schema":{"$ref":"#/components/schemas/CreateRoleDto"}}}},"responses":{"201":{"description":""}},"summary":"Create a role","tags":["roles"]}},"/api/v1/roles/{id}":{"get":{"operationId":"RolesController_findOne","parameters":[{"name":"id","required":true,"in":"path","schema":{"type":"string"}}],"responses":{"200":{"description":""}},"summary":"Get a role with its permissions","tags":["roles"]},"patch":{"operationId":"RolesController_update","parameters":[{"name":"id","required":true,"in":"path","schema":{"type":"string"}}],"requestBody":{"required":true,"content":{"application/json":{"schema":{"$ref":"#/components/schemas/UpdateRoleDto"}}}},"responses":{"200":{"description":""}},"summary":"Update a role","tags":["roles"]},"delete":{"operationId":"RolesController_remove","parameters":[{"name":"id","required":true,"in":"path","schema":{"type":"string"}}],"responses":{"200":{"description":""}},"summary":"Soft-delete a role","tags":["roles"]}},"/api/v1/roles/{id}/permissions":{"post":{"operationId":"RolesController_assignPermissions","parameters":[{"name":"id","required":true,"in":"path","schema":{"type":"string"}}],"requestBody":{"required":true,"content":{"application/json":{"schema":{"$ref":"#/components/schemas/AssignPermissionsDto"}}}},"responses":{"201":{"description":""}},"summary":"Replace a role permission set","tags":["roles"]}},"/api/v1/roles/{id}/users":{"get":{"operationId":"RolesController_getRoleUsers","parameters":[{"name":"id","required":true,"in":"path","schema":{"type":"string"}}],"responses":{"200":{"description":""}},"summary":"List users assigned a role","tags":["roles"]}},"/api/v1/permissions":{"get":{"operationId":"PermissionsController_findAll","parameters":[],"responses":{"200":{"description":""}},"summary":"List permission catalog","tags":["permissions"]}},"/api/v1/permissions/{id}":{"get":{"operationId":"PermissionsController_findOne","parameters":[{"name":"id","required":true,"in":"path","schema":{"type":"string"}}],"responses":{"200":{"description":""}},"summary":"Get a permission and its assigned roles","tags":["permissions"]}},"/api/v1/tenants":{"get":{"operationId":"TenantsController_findAll","parameters":[],"responses":{"200":{"description":""}},"summary":"List tenants","tags":["tenants"]},"post":{"operationId":"TenantsController_create","parameters":[],"requestBody":{"required":true,"content":{"application/json":{"schema":{"$ref":"#/components/schemas/CreateTenantDto"}}}},"responses":{"201":{"description":""}},"summary":"Create a tenant","tags":["tenants"]}},"/api/v1/tenants/{id}":{"get":{"operationId":"TenantsController_findOne","parameters":[{"name":"id","required":true,"in":"path","schema":{"type":"string"}}],"responses":{"200":{"description":""}},"summary":"Get a tenant by id","tags":["tenants"]},"patch":{"operationId":"TenantsController_update","parameters":[{"name":"id","required":true,"in":"path","schema":{"type":"string"}}],"requestBody":{"required":true,"content":{"application/json":{"schema":{"$ref":"#/components/schemas/UpdateTenantDto"}}}},"responses":{"200":{"description":""}},"summary":"Update a tenant","tags":["tenants"]},"delete":{"operationId":"TenantsController_remove","parameters":[{"name":"id","required":true,"in":"path","schema":{"type":"string"}}],"responses":{"200":{"description":""}},"summary":"Soft-delete a tenant","tags":["tenants"]}},"/api/v1/tenants/{id}/restore":{"post":{"operationId":"TenantsController_restore","parameters":[{"name":"id","required":true,"in":"path","schema":{"type":"string"}}],"responses":{"201":{"description":""}},"summary":"Restore a soft-deleted tenant","tags":["tenants"]}},"/api/v1/tenants/{id}/suspend":{"post":{"operationId":"TenantsController_suspend","parameters":[{"name":"id","required":true,"in":"path","schema":{"type":"string"}}],"requestBody":{"required":true,"content":{"application/json":{"schema":{"$ref":"#/components/schemas/SuspendTenantDto"}}}},"responses":{"201":{"description":""}},"summary":"Suspend a tenant","tags":["tenants"]}},"/api/v1/tenants/{id}/unsuspend":{"post":{"operationId":"TenantsController_unsuspend","parameters":[{"name":"id","required":true,"in":"path","schema":{"type":"string"}}],"responses":{"201":{"description":""}},"summary":"Activate a suspended tenant","tags":["tenants"]}},"/api/v1/tenants/{tenantId}/settings":{"get":{"operationId":"TenantSettingsController_list","parameters":[{"name":"tenantId","required":true,"in":"path","schema":{"type":"string"}}],"responses":{"200":{"description":""}},"summary":"List a tenant settings (secrets masked)","tags":["tenants"]},"post":{"operationId":"TenantSettingsController_set","parameters":[{"name":"tenantId","required":true,"in":"path","schema":{"type":"string"}}],"requestBody":{"required":true,"content":{"application/json":{"schema":{"$ref":"#/components/schemas/SetTenantSettingDto"}}}},"responses":{"201":{"description":""}},"summary":"Create or replace a tenant setting","tags":["tenants"]}},"/api/v1/tenants/{tenantId}/settings/{key}":{"get":{"operationId":"TenantSettingsController_get","parameters":[{"name":"tenantId","required":true,"in":"path","schema":{"type":"string"}},{"name":"key","required":true,"in":"path","schema":{"type":"string"}}],"responses":{"200":{"description":""}},"summary":"Get a tenant setting","tags":["tenants"]},"patch":{"operationId":"TenantSettingsController_update","parameters":[{"name":"tenantId","required":true,"in":"path","schema":{"type":"string"}},{"name":"key","required":true,"in":"path","schema":{"type":"string"}}],"requestBody":{"required":true,"content":{"application/json":{"schema":{"$ref":"#/components/schemas/UpdateTenantSettingDto"}}}},"responses":{"200":{"description":""}},"summary":"Update a tenant setting","tags":["tenants"]},"delete":{"operationId":"TenantSettingsController_remove","parameters":[{"name":"tenantId","required":true,"in":"path","schema":{"type":"string"}},{"name":"key","required":true,"in":"path","schema":{"type":"string"}}],"responses":{"200":{"description":""}},"summary":"Delete a tenant setting","tags":["tenants"]}},"/api/v1/tenants/{id}/usage":{"get":{"operationId":"TenantOpsController_getUsage","parameters":[{"name":"id","required":true,"in":"path","schema":{"type":"string"}}],"responses":{"200":{"description":""}},"summary":"Get current usage and usage history for a tenant","tags":["tenants"]}},"/api/v1/tenants/{id}/activity":{"get":{"operationId":"TenantOpsController_getActivity","parameters":[{"name":"id","required":true,"in":"path","schema":{"type":"string"}}],"responses":{"200":{"description":""}},"summary":"Get the activity timeline (audit log) for a tenant","tags":["tenants"]}},"/api/v1/tenants/{id}/impersonations":{"get":{"operationId":"TenantOpsController_getImpersonations","parameters":[{"name":"id","required":true,"in":"path","schema":{"type":"string"}}],"responses":{"200":{"description":""}},"summary":"Get impersonation logs for a tenant","tags":["tenants"]}},"/api/v1/plans":{"get":{"operationId":"PlansController_findAll","parameters":[],"responses":{"200":{"description":""}},"summary":"List subscription plans","tags":["plans"]},"post":{"operationId":"PlansController_create","parameters":[],"requestBody":{"required":true,"content":{"application/json":{"schema":{"$ref":"#/components/schemas/CreatePlanDto"}}}},"responses":{"201":{"description":""}},"summary":"Create a subscription plan","tags":["plans"]}},"/api/v1/plans/{id}":{"get":{"operationId":"PlansController_findOne","parameters":[{"name":"id","required":true,"in":"path","schema":{"type":"string"}}],"responses":{"200":{"description":""}},"summary":"Get a plan with its limits","tags":["plans"]},"patch":{"operationId":"PlansController_update","parameters":[{"name":"id","required":true,"in":"path","schema":{"type":"string"}}],"requestBody":{"required":true,"content":{"application/json":{"schema":{"$ref":"#/components/schemas/UpdatePlanDto"}}}},"responses":{"200":{"description":""}},"summary":"Update a subscription plan","tags":["plans"]},"delete":{"operationId":"PlansController_remove","parameters":[{"name":"id","required":true,"in":"path","schema":{"type":"string"}}],"responses":{"200":{"description":""}},"summary":"Soft-delete a subscription plan","tags":["plans"]}},"/api/v1/subscriptions":{"get":{"operationId":"SubscriptionsController_findAll","parameters":[],"responses":{"200":{"description":""}},"summary":"List subscriptions","tags":["subscriptions"]},"post":{"operationId":"SubscriptionsController_create","parameters":[],"requestBody":{"required":true,"content":{"application/json":{"schema":{"$ref":"#/components/schemas/CreateSubscriptionDto"}}}},"responses":{"201":{"description":""}},"summary":"Create a subscription for a tenant","tags":["subscriptions"]}},"/api/v1/subscriptions/{id}":{"get":{"operationId":"SubscriptionsController_findOne","parameters":[{"name":"id","required":true,"in":"path","schema":{"type":"string"}}],"responses":{"200":{"description":""}},"summary":"Get a subscription","tags":["subscriptions"]},"patch":{"operationId":"SubscriptionsController_update","parameters":[{"name":"id","required":true,"in":"path","schema":{"type":"string"}}],"requestBody":{"required":true,"content":{"application/json":{"schema":{"$ref":"#/components/schemas/UpdateSubscriptionDto"}}}},"responses":{"200":{"description":""}},"summary":"Update a subscription","tags":["subscriptions"]}},"/api/v1/subscriptions/{id}/invoices":{"get":{"operationId":"SubscriptionsController_getInvoices","parameters":[{"name":"id","required":true,"in":"path","schema":{"type":"string"}}],"responses":{"200":{"description":""}},"summary":"List invoices for a subscription","tags":["subscriptions"]}},"/api/v1/subscriptions/{id}/cancel":{"post":{"operationId":"SubscriptionsController_cancel","parameters":[{"name":"id","required":true,"in":"path","schema":{"type":"string"}}],"responses":{"201":{"description":""}},"summary":"Cancel a subscription","tags":["subscriptions"]}},"/api/v1/subscriptions/{id}/renew":{"post":{"operationId":"SubscriptionsController_renew","parameters":[{"name":"id","required":true,"in":"path","schema":{"type":"string"}}],"responses":{"201":{"description":""}},"summary":"Renew a subscription","tags":["subscriptions"]}},"/api/v1/invoices":{"get":{"operationId":"BillingController_listInvoices","parameters":[],"responses":{"200":{"description":""}},"summary":"List invoices","tags":["billing"]},"post":{"operationId":"BillingController_createInvoice","parameters":[],"requestBody":{"required":true,"content":{"application/json":{"schema":{"$ref":"#/components/schemas/CreateInvoiceDto"}}}},"responses":{"201":{"description":""}},"summary":"Create an invoice","tags":["billing"]}},"/api/v1/invoices/{id}":{"get":{"operationId":"BillingController_findInvoice","parameters":[{"name":"id","required":true,"in":"path","schema":{"type":"string"}}],"responses":{"200":{"description":""}},"summary":"Get an invoice with line items and payments","tags":["billing"]}},"/api/v1/payments":{"get":{"operationId":"BillingController_listPayments","parameters":[],"responses":{"200":{"description":""}},"summary":"List payments","tags":["billing"]},"post":{"operationId":"BillingController_recordPayment","parameters":[],"requestBody":{"required":true,"content":{"application/json":{"schema":{"$ref":"#/components/schemas/RecordPaymentDto"}}}},"responses":{"201":{"description":""}},"summary":"Record a payment against an invoice","tags":["billing"]}},"/api/v1/audit-logs":{"get":{"operationId":"MonitoringController_listAuditLogs","parameters":[],"responses":{"200":{"description":""}},"summary":"List audit logs","tags":["monitoring"]}},"/api/v1/audit-logs/{id}":{"get":{"operationId":"MonitoringController_findAuditLog","parameters":[{"name":"id","required":true,"in":"path","schema":{"type":"string"}}],"responses":{"200":{"description":""}},"summary":"Get an audit log entry","tags":["monitoring"]}},"/api/v1/errors":{"get":{"operationId":"MonitoringController_listErrors","parameters":[],"responses":{"200":{"description":""}},"summary":"List platform errors","tags":["monitoring"]}},"/api/v1/errors/{id}":{"get":{"operationId":"MonitoringController_findError","parameters":[{"name":"id","required":true,"in":"path","schema":{"type":"string"}}],"responses":{"200":{"description":""}},"summary":"Get an error with stack trace","tags":["monitoring"]}},"/api/v1/errors/{id}/resolve":{"patch":{"operationId":"MonitoringController_resolveError","parameters":[{"name":"id","required":true,"in":"path","schema":{"type":"string"}}],"responses":{"200":{"description":""}},"summary":"Mark an error resolved","tags":["monitoring"]}},"/api/v1/errors/{id}/dismiss":{"patch":{"operationId":"MonitoringController_dismissError","parameters":[{"name":"id","required":true,"in":"path","schema":{"type":"string"}}],"responses":{"200":{"description":""}},"summary":"Dismiss an error","tags":["monitoring"]}},"/api/v1/health/history/{service}":{"get":{"operationId":"MonitoringController_listHealthHistory","parameters":[{"name":"service","required":true,"in":"path","schema":{"type":"string"}}],"responses":{"200":{"description":""}},"summary":"List health check history for a service","tags":["monitoring"]}},"/api/v1/monitoring/api-logs":{"get":{"operationId":"ObservabilityController_listApiLogs","parameters":[],"responses":{"200":{"description":""}},"summary":"List API request logs","tags":["monitoring"]}},"/api/v1/monitoring/slow-queries":{"get":{"operationId":"ObservabilityController_listSlowQueries","parameters":[],"responses":{"200":{"description":""}},"summary":"List slow query logs","tags":["monitoring"]}},"/api/v1/monitoring/trace/{correlationId}":{"get":{"operationId":"ObservabilityController_trace","parameters":[{"name":"correlationId","required":true,"in":"path","schema":{"type":"string"}}],"responses":{"200":{"description":""}},"summary":"Trace a request by correlation id across API/audit/outbox","tags":["monitoring"]}},"/api/v1/monitoring/jobs":{"get":{"operationId":"ObservabilityController_listJobs","parameters":[],"responses":{"200":{"description":""}},"summary":"List background jobs","tags":["monitoring"]}},"/api/v1/monitoring/jobs/{id}/retry":{"post":{"operationId":"ObservabilityController_retryJob","parameters":[{"name":"id","required":true,"in":"path","schema":{"type":"string"}}],"responses":{"201":{"description":""}},"summary":"Re-queue a failed background job","tags":["monitoring"]}},"/api/v1/monitoring/system-logs":{"get":{"operationId":"ObservabilityController_listSystemLogs","parameters":[],"responses":{"200":{"description":""}},"summary":"List system logs","tags":["monitoring"]}},"/api/v1/support/tickets":{"get":{"operationId":"SupportController_findAll","parameters":[],"responses":{"200":{"description":""}},"summary":"List support tickets","tags":["support"]},"post":{"operationId":"SupportController_create","parameters":[],"requestBody":{"required":true,"content":{"application/json":{"schema":{"$ref":"#/components/schemas/CreateTicketDto"}}}},"responses":{"201":{"description":""}},"summary":"Create a support ticket","tags":["support"]}},"/api/v1/support/tickets/{id}":{"get":{"operationId":"SupportController_findOne","parameters":[{"name":"id","required":true,"in":"path","schema":{"type":"string"}}],"responses":{"200":{"description":""}},"summary":"Get a ticket with its messages","tags":["support"]},"patch":{"operationId":"SupportController_update","parameters":[{"name":"id","required":true,"in":"path","schema":{"type":"string"}}],"requestBody":{"required":true,"content":{"application/json":{"schema":{"$ref":"#/components/schemas/UpdateTicketDto"}}}},"responses":{"200":{"description":""}},"summary":"Update a support ticket","tags":["support"]}},"/api/v1/support/tickets/{id}/messages":{"post":{"operationId":"SupportController_addMessage","parameters":[{"name":"id","required":true,"in":"path","schema":{"type":"string"}}],"requestBody":{"required":true,"content":{"application/json":{"schema":{"$ref":"#/components/schemas/AddTicketMessageDto"}}}},"responses":{"201":{"description":""}},"summary":"Add a message to a ticket","tags":["support"]}},"/api/v1/maintenance":{"get":{"operationId":"MaintenanceController_findAll","parameters":[],"responses":{"200":{"description":""}},"summary":"List maintenance windows","tags":["maintenance"]},"post":{"operationId":"MaintenanceController_create","parameters":[],"requestBody":{"required":true,"content":{"application/json":{"schema":{"$ref":"#/components/schemas/CreateMaintenanceDto"}}}},"responses":{"201":{"description":""}},"summary":"Create a maintenance window","tags":["maintenance"]}},"/api/v1/maintenance/{id}":{"patch":{"operationId":"MaintenanceController_update","parameters":[{"name":"id","required":true,"in":"path","schema":{"type":"string"}}],"requestBody":{"required":true,"content":{"application/json":{"schema":{"$ref":"#/components/schemas/UpdateMaintenanceDto"}}}},"responses":{"200":{"description":""}},"summary":"Update a maintenance window","tags":["maintenance"]}},"/api/v1/maintenance/{id}/start":{"post":{"operationId":"MaintenanceController_start","parameters":[{"name":"id","required":true,"in":"path","schema":{"type":"string"}}],"responses":{"201":{"description":""}},"summary":"Start a maintenance window","tags":["maintenance"]}},"/api/v1/maintenance/{id}/complete":{"post":{"operationId":"MaintenanceController_complete","parameters":[{"name":"id","required":true,"in":"path","schema":{"type":"string"}}],"responses":{"201":{"description":""}},"summary":"Complete a maintenance window","tags":["maintenance"]}},"/api/v1/maintenance/{id}/cancel":{"post":{"operationId":"MaintenanceController_cancel","parameters":[{"name":"id","required":true,"in":"path","schema":{"type":"string"}}],"responses":{"201":{"description":""}},"summary":"Cancel a maintenance window","tags":["maintenance"]}},"/api/v1/tenants/{id}/impersonate":{"post":{"operationId":"ImpersonationController_impersonate","parameters":[{"name":"id","required":true,"in":"path","schema":{"type":"string"}}],"requestBody":{"required":true,"content":{"application/json":{"schema":{"$ref":"#/components/schemas/ImpersonateDto"}}}},"responses":{"201":{"description":""}},"summary":"Start impersonating a tenant","tags":["impersonation"]}},"/api/v1/impersonation/exit":{"post":{"operationId":"ImpersonationController_exit","parameters":[],"requestBody":{"required":true,"content":{"application/json":{"schema":{"$ref":"#/components/schemas/EndImpersonationDto"}}}},"responses":{"201":{"description":""}},"summary":"End active impersonation session(s) for the caller","tags":["impersonation"]}},"/api/v1/impersonation/active":{"get":{"operationId":"ImpersonationController_active","parameters":[],"responses":{"200":{"description":""}},"summary":"Get the active impersonation session for the caller","tags":["impersonation"]}},"/api/v1/impersonation":{"get":{"operationId":"ImpersonationController_findAll","parameters":[],"responses":{"200":{"description":""}},"summary":"List impersonation logs","tags":["impersonation"]}},"/api/v1/impersonation/{id}":{"get":{"operationId":"ImpersonationController_findOne","parameters":[{"name":"id","required":true,"in":"path","schema":{"type":"string"}}],"responses":{"200":{"description":""}},"summary":"Get an impersonation log","tags":["impersonation"]}},"/api/v1/outbox/events":{"get":{"operationId":"OutboxController_listEvents","parameters":[],"responses":{"200":{"description":""}},"summary":"List outbox events","tags":["outbox"]}},"/api/v1/outbox/events/{id}/retry":{"post":{"operationId":"OutboxController_retry","parameters":[{"name":"id","required":true,"in":"path","schema":{"type":"string"}}],"responses":{"201":{"description":""}},"summary":"Re-queue a failed outbox event","tags":["outbox"]}},"/api/v1/outbox/process":{"post":{"operationId":"OutboxController_process","parameters":[],"responses":{"201":{"description":""}},"summary":"Trigger an immediate outbox processing cycle","tags":["outbox"]}},"/api/v1/outbox/dead-letter":{"get":{"operationId":"OutboxController_listDeadLetter","parameters":[],"responses":{"200":{"description":""}},"summary":"List dead-letter events","tags":["outbox"]}},"/api/v1/outbox/dead-letter/{id}/replay":{"post":{"operationId":"OutboxController_replay","parameters":[{"name":"id","required":true,"in":"path","schema":{"type":"string"}}],"responses":{"201":{"description":""}},"summary":"Replay a dead-letter event through the outbox","tags":["outbox"]}},"/api/v1/api-keys":{"get":{"operationId":"SecurityController_listApiKeys","parameters":[],"responses":{"200":{"description":""}},"summary":"List API keys","tags":["security"]},"post":{"operationId":"SecurityController_createApiKey","parameters":[],"requestBody":{"required":true,"content":{"application/json":{"schema":{"$ref":"#/components/schemas/CreateApiKeyDto"}}}},"responses":{"201":{"description":""}},"summary":"Create an API key","tags":["security"]}},"/api/v1/api-keys/{id}/revoke":{"post":{"operationId":"SecurityController_revokeApiKey","parameters":[{"name":"id","required":true,"in":"path","schema":{"type":"string"}}],"responses":{"201":{"description":""}},"summary":"Revoke an API key","tags":["security"]}},"/api/v1/webhook-keys":{"get":{"operationId":"SecurityController_listWebhookKeys","parameters":[],"responses":{"200":{"description":""}},"summary":"List webhook keys","tags":["security"]},"post":{"operationId":"SecurityController_createWebhookKey","parameters":[],"requestBody":{"required":true,"content":{"application/json":{"schema":{"$ref":"#/components/schemas/CreateWebhookKeyDto"}}}},"responses":{"201":{"description":""}},"summary":"Create a webhook key","tags":["security"]}},"/api/v1/webhook-keys/{id}/revoke":{"post":{"operationId":"SecurityController_revokeWebhookKey","parameters":[{"name":"id","required":true,"in":"path","schema":{"type":"string"}}],"responses":{"201":{"description":""}},"summary":"Revoke a webhook key","tags":["security"]}},"/api/v1/api-consumers":{"get":{"operationId":"SecurityController_listApiConsumers","parameters":[],"responses":{"200":{"description":""}},"summary":"List API consumers","tags":["security"]},"post":{"operationId":"SecurityController_createApiConsumer","parameters":[],"requestBody":{"required":true,"content":{"application/json":{"schema":{"$ref":"#/components/schemas/CreateApiConsumerDto"}}}},"responses":{"201":{"description":""}},"summary":"Create an API consumer","tags":["security"]}},"/api/v1/api-consumers/{id}":{"patch":{"operationId":"SecurityController_updateApiConsumer","parameters":[{"name":"id","required":true,"in":"path","schema":{"type":"string"}}],"requestBody":{"required":true,"content":{"application/json":{"schema":{"$ref":"#/components/schemas/UpdateApiConsumerDto"}}}},"responses":{"200":{"description":""}},"summary":"Update an API consumer","tags":["security"]}},"/api/v1/api-consumers/{id}/rotate-secret":{"post":{"operationId":"SecurityController_rotateApiConsumerSecret","parameters":[{"name":"id","required":true,"in":"path","schema":{"type":"string"}}],"responses":{"201":{"description":""}},"summary":"Rotate an API consumer secret","tags":["security"]}},"/api/v1/blocked-ips":{"get":{"operationId":"SecurityController_listBlockedIps","parameters":[],"responses":{"200":{"description":""}},"summary":"List blocked IPs","tags":["security"]},"post":{"operationId":"SecurityController_blockIp","parameters":[],"requestBody":{"required":true,"content":{"application/json":{"schema":{"$ref":"#/components/schemas/CreateBlockedIpDto"}}}},"responses":{"201":{"description":""}},"summary":"Block an IP address","tags":["security"]}},"/api/v1/blocked-ips/{id}/unblock":{"post":{"operationId":"SecurityController_unblockIp","parameters":[{"name":"id","required":true,"in":"path","schema":{"type":"string"}}],"responses":{"201":{"description":""}},"summary":"Unblock an IP address","tags":["security"]}},"/api/v1/sessions":{"get":{"operationId":"SecurityController_listSessions","parameters":[],"responses":{"200":{"description":""}},"summary":"List platform sessions","tags":["security"]}},"/api/v1/sessions/{id}/revoke":{"post":{"operationId":"SecurityController_revokeSession","parameters":[{"name":"id","required":true,"in":"path","schema":{"type":"string"}}],"responses":{"201":{"description":""}},"summary":"Revoke a platform session","tags":["security"]}},"/api/v1/login-attempts":{"get":{"operationId":"SecurityController_listLoginAttempts","parameters":[],"responses":{"200":{"description":""}},"summary":"List login attempts","tags":["security"]}},"/api/v1/notifications":{"get":{"operationId":"CommunicationsController_listNotifications","parameters":[],"responses":{"200":{"description":""}},"summary":"List notifications (self by default)","tags":["communications"]}},"/api/v1/notifications/{id}/read":{"post":{"operationId":"CommunicationsController_markRead","parameters":[{"name":"id","required":true,"in":"path","schema":{"type":"string"}}],"responses":{"201":{"description":""}},"summary":"Mark a notification as read","tags":["communications"]}},"/api/v1/notifications/read-all":{"post":{"operationId":"CommunicationsController_markAllRead","parameters":[],"responses":{"201":{"description":""}},"summary":"Mark all notifications as read","tags":["communications"]}},"/api/v1/announcements":{"get":{"operationId":"CommunicationsController_listAnnouncements","parameters":[],"responses":{"200":{"description":""}},"summary":"List announcements","tags":["communications"]},"post":{"operationId":"CommunicationsController_createAnnouncement","parameters":[],"requestBody":{"required":true,"content":{"application/json":{"schema":{"$ref":"#/components/schemas/CreateAnnouncementDto"}}}},"responses":{"201":{"description":""}},"summary":"Create an announcement","tags":["communications"]}},"/api/v1/announcements/{id}":{"patch":{"operationId":"CommunicationsController_updateAnnouncement","parameters":[{"name":"id","required":true,"in":"path","schema":{"type":"string"}}],"requestBody":{"required":true,"content":{"application/json":{"schema":{"$ref":"#/components/schemas/UpdateAnnouncementDto"}}}},"responses":{"200":{"description":""}},"summary":"Update an announcement","tags":["communications"]}},"/api/v1/announcements/{id}/publish":{"post":{"operationId":"CommunicationsController_publishAnnouncement","parameters":[{"name":"id","required":true,"in":"path","schema":{"type":"string"}}],"responses":{"201":{"description":""}},"summary":"Publish an announcement","tags":["communications"]}},"/api/v1/announcements/{id}/cancel":{"post":{"operationId":"CommunicationsController_cancelAnnouncement","parameters":[{"name":"id","required":true,"in":"path","schema":{"type":"string"}}],"responses":{"201":{"description":""}},"summary":"Cancel an announcement","tags":["communications"]}},"/api/v1/broadcasts":{"get":{"operationId":"CommunicationsController_listBroadcasts","parameters":[],"responses":{"200":{"description":""}},"summary":"List broadcasts","tags":["communications"]},"post":{"operationId":"CommunicationsController_createBroadcast","parameters":[],"requestBody":{"required":true,"content":{"application/json":{"schema":{"$ref":"#/components/schemas/CreateBroadcastDto"}}}},"responses":{"201":{"description":""}},"summary":"Create a broadcast","tags":["communications"]}},"/api/v1/broadcasts/{id}/send":{"post":{"operationId":"CommunicationsController_sendBroadcast","parameters":[{"name":"id","required":true,"in":"path","schema":{"type":"string"}}],"responses":{"201":{"description":""}},"summary":"Send a broadcast","tags":["communications"]}},"/api/v1/platform/settings":{"get":{"operationId":"PlatformConfigController_listSettings","parameters":[],"responses":{"200":{"description":""}},"summary":"List platform settings","tags":["platform-config"]}},"/api/v1/platform/settings/{key}":{"patch":{"operationId":"PlatformConfigController_updateSetting","parameters":[{"name":"key","required":true,"in":"path","schema":{"type":"string"}}],"requestBody":{"required":true,"content":{"application/json":{"schema":{"$ref":"#/components/schemas/UpdatePlatformSettingDto"}}}},"responses":{"200":{"description":""}},"summary":"Update a platform setting (secrets are rotated + history kept)","tags":["platform-config"]}},"/api/v1/platform/feature-flags":{"get":{"operationId":"PlatformConfigController_listFlags","parameters":[],"responses":{"200":{"description":""}},"summary":"List feature flags","tags":["platform-config"]},"post":{"operationId":"PlatformConfigController_createFlag","parameters":[],"requestBody":{"required":true,"content":{"application/json":{"schema":{"$ref":"#/components/schemas/CreateFeatureFlagDto"}}}},"responses":{"201":{"description":""}},"summary":"Create a feature flag","tags":["platform-config"]}},"/api/v1/platform/feature-flags/{id}":{"patch":{"operationId":"PlatformConfigController_updateFlag","parameters":[{"name":"id","required":true,"in":"path","schema":{"type":"string"}}],"requestBody":{"required":true,"content":{"application/json":{"schema":{"$ref":"#/components/schemas/UpdateFeatureFlagDto"}}}},"responses":{"200":{"description":""}},"summary":"Update a feature flag","tags":["platform-config"]}}},"info":{"title":"PEB SUPER-ADMIN Platform API","description":"Enterprise SaaS control plane API","version":"1.0","contact":{}},"tags":[{"name":"health","description":"Health checks"}],"servers":[],"components":{"securitySchemes":{"bearer":{"scheme":"bearer","bearerFormat":"JWT","type":"http"},"api-key":{"type":"apiKey","in":"header","name":"X-API-Key"}},"schemas":{"LoginDto":{"type":"object","properties":{}},"RefreshTokenDto":{"type":"object","properties":{}},"ChangePasswordDto":{"type":"object","properties":{}},"ForgotPasswordDto":{"type":"object","properties":{}},"ResetPasswordDto":{"type":"object","properties":{}},"CreateUserDto":{"type":"object","properties":{}},"UpdateUserDto":{"type":"object","properties":{}},"SuspendUserDto":{"type":"object","properties":{}},"AdminResetPasswordDto":{"type":"object","properties":{}},"CreateRoleDto":{"type":"object","properties":{}},"UpdateRoleDto":{"type":"object","properties":{}},"AssignPermissionsDto":{"type":"object","properties":{}},"CreateTenantDto":{"type":"object","properties":{}},"UpdateTenantDto":{"type":"object","properties":{}},"SuspendTenantDto":{"type":"object","properties":{}},"SetTenantSettingDto":{"type":"object","properties":{}},"UpdateTenantSettingDto":{"type":"object","properties":{}},"CreatePlanDto":{"type":"object","properties":{}},"UpdatePlanDto":{"type":"object","properties":{}},"CreateSubscriptionDto":{"type":"object","properties":{}},"UpdateSubscriptionDto":{"type":"object","properties":{}},"CreateInvoiceDto":{"type":"object","properties":{}},"RecordPaymentDto":{"type":"object","properties":{}},"CreateTicketDto":{"type":"object","properties":{}},"UpdateTicketDto":{"type":"object","properties":{}},"AddTicketMessageDto":{"type":"object","properties":{}},"CreateMaintenanceDto":{"type":"object","properties":{}},"UpdateMaintenanceDto":{"type":"object","properties":{}},"ImpersonateDto":{"type":"object","properties":{}},"EndImpersonationDto":{"type":"object","properties":{}},"CreateApiKeyDto":{"type":"object","properties":{}},"CreateWebhookKeyDto":{"type":"object","properties":{}},"CreateApiConsumerDto":{"type":"object","properties":{}},"UpdateApiConsumerDto":{"type":"object","properties":{}},"CreateBlockedIpDto":{"type":"object","properties":{}},"CreateAnnouncementDto":{"type":"object","properties":{}},"UpdateAnnouncementDto":{"type":"object","properties":{}},"CreateBroadcastDto":{"type":"object","properties":{}},"UpdatePlatformSettingDto":{"type":"object","properties":{}},"CreateFeatureFlagDto":{"type":"object","properties":{}},"UpdateFeatureFlagDto":{"type":"object","properties":{}}}}}
+{
+  "openapi": "3.0.0",
+  "paths": {
+    "/api/v1/health": {
+      "get": {
+        "operationId": "HealthController_check",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The Health Check is successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "ok"
+                    },
+                    "info": {
+                      "type": "object",
+                      "example": {
+                        "database": {
+                          "status": "up"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "object",
+                      "example": {},
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      "nullable": true
+                    },
+                    "details": {
+                      "type": "object",
+                      "example": {
+                        "database": {
+                          "status": "up"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The Health Check is not successful",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "error"
+                    },
+                    "info": {
+                      "type": "object",
+                      "example": {
+                        "database": {
+                          "status": "up"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      "nullable": true
+                    },
+                    "error": {
+                      "type": "object",
+                      "example": {
+                        "redis": {
+                          "status": "down",
+                          "message": "Could not connect"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      },
+                      "nullable": true
+                    },
+                    "details": {
+                      "type": "object",
+                      "example": {
+                        "database": {
+                          "status": "up"
+                        },
+                        "redis": {
+                          "status": "down",
+                          "message": "Could not connect"
+                        }
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "required": [
+                          "status"
+                        ],
+                        "properties": {
+                          "status": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Health"
+        ]
+      }
+    },
+    "/api/v1/health/db": {
+      "get": {
+        "operationId": "HealthController_db",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Health"
+        ]
+      }
+    },
+    "/api/v1/auth/login": {
+      "post": {
+        "operationId": "AuthController_login",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Log in a platform user",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/refresh": {
+      "post": {
+        "operationId": "AuthController_refresh",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshTokenDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Refresh access token using a refresh token",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/logout": {
+      "post": {
+        "operationId": "AuthController_logout",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Log out and revoke the current session",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/me": {
+      "get": {
+        "operationId": "AuthController_me",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get the current user profile",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/change-password": {
+      "post": {
+        "operationId": "AuthController_changePassword",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangePasswordDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Change the current password",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/forgot-password": {
+      "post": {
+        "operationId": "AuthController_forgotPassword",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ForgotPasswordDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Request a password reset link",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/auth/reset-password": {
+      "post": {
+        "operationId": "AuthController_resetPassword",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResetPasswordDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Reset the password using a reset token",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/v1/users": {
+      "get": {
+        "operationId": "UsersController_findAll",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "List platform users",
+        "tags": [
+          "users"
+        ]
+      },
+      "post": {
+        "operationId": "UsersController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateUserDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Create a platform user",
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/api/v1/users/{id}": {
+      "get": {
+        "operationId": "UsersController_findOne",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get a platform user by id",
+        "tags": [
+          "users"
+        ]
+      },
+      "patch": {
+        "operationId": "UsersController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateUserDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Update a platform user",
+        "tags": [
+          "users"
+        ]
+      },
+      "delete": {
+        "operationId": "UsersController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Soft-delete a platform user",
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/api/v1/users/{id}/restore": {
+      "post": {
+        "operationId": "UsersController_restore",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Restore a soft-deleted platform user",
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/api/v1/users/{id}/suspend": {
+      "post": {
+        "operationId": "UsersController_suspend",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SuspendUserDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Suspend a platform user",
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/api/v1/users/{id}/unsuspend": {
+      "post": {
+        "operationId": "UsersController_unsuspend",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Unsuspend a platform user",
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/api/v1/users/{id}/reset-password": {
+      "post": {
+        "operationId": "UsersController_resetPassword",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminResetPasswordDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Reset a platform user password",
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/api/v1/users/{id}/force-logout": {
+      "post": {
+        "operationId": "UsersController_forceLogout",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Terminate all sessions for a user",
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/api/v1/users/{id}/sessions": {
+      "get": {
+        "operationId": "UsersController_getSessions",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "List a user active sessions",
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/api/v1/users/{id}/login-history": {
+      "get": {
+        "operationId": "UsersController_getLoginHistory",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "List a user login history",
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/api/v1/roles": {
+      "get": {
+        "operationId": "RolesController_findAll",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "List platform roles",
+        "tags": [
+          "roles"
+        ]
+      },
+      "post": {
+        "operationId": "RolesController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateRoleDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Create a role",
+        "tags": [
+          "roles"
+        ]
+      }
+    },
+    "/api/v1/roles/{id}": {
+      "get": {
+        "operationId": "RolesController_findOne",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get a role with its permissions",
+        "tags": [
+          "roles"
+        ]
+      },
+      "patch": {
+        "operationId": "RolesController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateRoleDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Update a role",
+        "tags": [
+          "roles"
+        ]
+      },
+      "delete": {
+        "operationId": "RolesController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Soft-delete a role",
+        "tags": [
+          "roles"
+        ]
+      }
+    },
+    "/api/v1/roles/{id}/permissions": {
+      "post": {
+        "operationId": "RolesController_assignPermissions",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignPermissionsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Replace a role permission set",
+        "tags": [
+          "roles"
+        ]
+      }
+    },
+    "/api/v1/roles/{id}/users": {
+      "get": {
+        "operationId": "RolesController_getRoleUsers",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "List users assigned a role",
+        "tags": [
+          "roles"
+        ]
+      }
+    },
+    "/api/v1/permissions": {
+      "get": {
+        "operationId": "PermissionsController_findAll",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "List permission catalog",
+        "tags": [
+          "permissions"
+        ]
+      }
+    },
+    "/api/v1/permissions/{id}": {
+      "get": {
+        "operationId": "PermissionsController_findOne",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get a permission and its assigned roles",
+        "tags": [
+          "permissions"
+        ]
+      }
+    },
+    "/api/v1/tenants": {
+      "get": {
+        "operationId": "TenantsController_findAll",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "List tenants",
+        "tags": [
+          "tenants"
+        ]
+      },
+      "post": {
+        "operationId": "TenantsController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTenantDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Create a tenant",
+        "tags": [
+          "tenants"
+        ]
+      }
+    },
+    "/api/v1/tenants/{id}": {
+      "get": {
+        "operationId": "TenantsController_findOne",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get a tenant by id",
+        "tags": [
+          "tenants"
+        ]
+      },
+      "patch": {
+        "operationId": "TenantsController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTenantDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Update a tenant",
+        "tags": [
+          "tenants"
+        ]
+      },
+      "delete": {
+        "operationId": "TenantsController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Soft-delete a tenant",
+        "tags": [
+          "tenants"
+        ]
+      }
+    },
+    "/api/v1/tenants/{id}/restore": {
+      "post": {
+        "operationId": "TenantsController_restore",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Restore a soft-deleted tenant",
+        "tags": [
+          "tenants"
+        ]
+      }
+    },
+    "/api/v1/tenants/{id}/suspend": {
+      "post": {
+        "operationId": "TenantsController_suspend",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SuspendTenantDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Suspend a tenant",
+        "tags": [
+          "tenants"
+        ]
+      }
+    },
+    "/api/v1/tenants/{id}/unsuspend": {
+      "post": {
+        "operationId": "TenantsController_unsuspend",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Activate a suspended tenant",
+        "tags": [
+          "tenants"
+        ]
+      }
+    },
+    "/api/v1/tenants/{tenantId}/settings": {
+      "get": {
+        "operationId": "TenantSettingsController_list",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "List a tenant settings (secrets masked)",
+        "tags": [
+          "tenants"
+        ]
+      },
+      "post": {
+        "operationId": "TenantSettingsController_set",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetTenantSettingDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Create or replace a tenant setting",
+        "tags": [
+          "tenants"
+        ]
+      }
+    },
+    "/api/v1/tenants/{tenantId}/settings/{key}": {
+      "get": {
+        "operationId": "TenantSettingsController_get",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "key",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get a tenant setting",
+        "tags": [
+          "tenants"
+        ]
+      },
+      "patch": {
+        "operationId": "TenantSettingsController_update",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "key",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTenantSettingDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Update a tenant setting",
+        "tags": [
+          "tenants"
+        ]
+      },
+      "delete": {
+        "operationId": "TenantSettingsController_remove",
+        "parameters": [
+          {
+            "name": "tenantId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "key",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Delete a tenant setting",
+        "tags": [
+          "tenants"
+        ]
+      }
+    },
+    "/api/v1/tenants/{id}/usage": {
+      "get": {
+        "operationId": "TenantOpsController_getUsage",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get current usage and usage history for a tenant",
+        "tags": [
+          "tenants"
+        ]
+      }
+    },
+    "/api/v1/tenants/{id}/activity": {
+      "get": {
+        "operationId": "TenantOpsController_getActivity",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get the activity timeline (audit log) for a tenant",
+        "tags": [
+          "tenants"
+        ]
+      }
+    },
+    "/api/v1/plans": {
+      "get": {
+        "operationId": "PlansController_findAll",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "List subscription plans",
+        "tags": [
+          "plans"
+        ]
+      },
+      "post": {
+        "operationId": "PlansController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePlanDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Create a subscription plan",
+        "tags": [
+          "plans"
+        ]
+      }
+    },
+    "/api/v1/plans/{id}": {
+      "get": {
+        "operationId": "PlansController_findOne",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get a plan with its limits",
+        "tags": [
+          "plans"
+        ]
+      },
+      "patch": {
+        "operationId": "PlansController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePlanDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Update a subscription plan",
+        "tags": [
+          "plans"
+        ]
+      },
+      "delete": {
+        "operationId": "PlansController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Soft-delete a subscription plan",
+        "tags": [
+          "plans"
+        ]
+      }
+    },
+    "/api/v1/subscriptions": {
+      "get": {
+        "operationId": "SubscriptionsController_findAll",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "List subscriptions",
+        "tags": [
+          "subscriptions"
+        ]
+      },
+      "post": {
+        "operationId": "SubscriptionsController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSubscriptionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Create a subscription for a tenant",
+        "tags": [
+          "subscriptions"
+        ]
+      }
+    },
+    "/api/v1/subscriptions/{id}": {
+      "get": {
+        "operationId": "SubscriptionsController_findOne",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get a subscription",
+        "tags": [
+          "subscriptions"
+        ]
+      },
+      "patch": {
+        "operationId": "SubscriptionsController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSubscriptionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Update a subscription",
+        "tags": [
+          "subscriptions"
+        ]
+      }
+    },
+    "/api/v1/subscriptions/{id}/invoices": {
+      "get": {
+        "operationId": "SubscriptionsController_getInvoices",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "List invoices for a subscription",
+        "tags": [
+          "subscriptions"
+        ]
+      }
+    },
+    "/api/v1/subscriptions/{id}/cancel": {
+      "post": {
+        "operationId": "SubscriptionsController_cancel",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Cancel a subscription",
+        "tags": [
+          "subscriptions"
+        ]
+      }
+    },
+    "/api/v1/subscriptions/{id}/renew": {
+      "post": {
+        "operationId": "SubscriptionsController_renew",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Renew a subscription",
+        "tags": [
+          "subscriptions"
+        ]
+      }
+    },
+    "/api/v1/invoices": {
+      "get": {
+        "operationId": "BillingController_listInvoices",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "List invoices",
+        "tags": [
+          "billing"
+        ]
+      },
+      "post": {
+        "operationId": "BillingController_createInvoice",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateInvoiceDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Create an invoice",
+        "tags": [
+          "billing"
+        ]
+      }
+    },
+    "/api/v1/invoices/{id}": {
+      "get": {
+        "operationId": "BillingController_findInvoice",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get an invoice with line items and payments",
+        "tags": [
+          "billing"
+        ]
+      }
+    },
+    "/api/v1/payments": {
+      "get": {
+        "operationId": "BillingController_listPayments",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "List payments",
+        "tags": [
+          "billing"
+        ]
+      },
+      "post": {
+        "operationId": "BillingController_recordPayment",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordPaymentDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Record a payment against an invoice",
+        "tags": [
+          "billing"
+        ]
+      }
+    },
+    "/api/v1/audit-logs": {
+      "get": {
+        "operationId": "MonitoringController_listAuditLogs",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "List audit logs",
+        "tags": [
+          "monitoring"
+        ]
+      }
+    },
+    "/api/v1/audit-logs/{id}": {
+      "get": {
+        "operationId": "MonitoringController_findAuditLog",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get an audit log entry",
+        "tags": [
+          "monitoring"
+        ]
+      }
+    },
+    "/api/v1/errors": {
+      "get": {
+        "operationId": "MonitoringController_listErrors",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "List platform errors",
+        "tags": [
+          "monitoring"
+        ]
+      }
+    },
+    "/api/v1/errors/{id}": {
+      "get": {
+        "operationId": "MonitoringController_findError",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get an error with stack trace",
+        "tags": [
+          "monitoring"
+        ]
+      }
+    },
+    "/api/v1/errors/{id}/resolve": {
+      "patch": {
+        "operationId": "MonitoringController_resolveError",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Mark an error resolved",
+        "tags": [
+          "monitoring"
+        ]
+      }
+    },
+    "/api/v1/errors/{id}/dismiss": {
+      "patch": {
+        "operationId": "MonitoringController_dismissError",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Dismiss an error",
+        "tags": [
+          "monitoring"
+        ]
+      }
+    },
+    "/api/v1/health/history/{service}": {
+      "get": {
+        "operationId": "MonitoringController_listHealthHistory",
+        "parameters": [
+          {
+            "name": "service",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "List health check history for a service",
+        "tags": [
+          "monitoring"
+        ]
+      }
+    },
+    "/api/v1/monitoring/api-logs": {
+      "get": {
+        "operationId": "ObservabilityController_listApiLogs",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "List API request logs",
+        "tags": [
+          "monitoring"
+        ]
+      }
+    },
+    "/api/v1/monitoring/slow-queries": {
+      "get": {
+        "operationId": "ObservabilityController_listSlowQueries",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "List slow query logs",
+        "tags": [
+          "monitoring"
+        ]
+      }
+    },
+    "/api/v1/monitoring/trace/{correlationId}": {
+      "get": {
+        "operationId": "ObservabilityController_trace",
+        "parameters": [
+          {
+            "name": "correlationId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Trace a request by correlation id across API/audit/outbox",
+        "tags": [
+          "monitoring"
+        ]
+      }
+    },
+    "/api/v1/monitoring/jobs": {
+      "get": {
+        "operationId": "ObservabilityController_listJobs",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "List background jobs",
+        "tags": [
+          "monitoring"
+        ]
+      }
+    },
+    "/api/v1/monitoring/jobs/{id}/retry": {
+      "post": {
+        "operationId": "ObservabilityController_retryJob",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Re-queue a failed background job",
+        "tags": [
+          "monitoring"
+        ]
+      }
+    },
+    "/api/v1/monitoring/system-logs": {
+      "get": {
+        "operationId": "ObservabilityController_listSystemLogs",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "List system logs",
+        "tags": [
+          "monitoring"
+        ]
+      }
+    },
+    "/api/v1/support/tickets": {
+      "get": {
+        "operationId": "SupportController_findAll",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "List support tickets",
+        "tags": [
+          "support"
+        ]
+      },
+      "post": {
+        "operationId": "SupportController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTicketDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Create a support ticket",
+        "tags": [
+          "support"
+        ]
+      }
+    },
+    "/api/v1/support/tickets/{id}": {
+      "get": {
+        "operationId": "SupportController_findOne",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Get a ticket with its messages",
+        "tags": [
+          "support"
+        ]
+      },
+      "patch": {
+        "operationId": "SupportController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTicketDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Update a support ticket",
+        "tags": [
+          "support"
+        ]
+      }
+    },
+    "/api/v1/support/tickets/{id}/messages": {
+      "post": {
+        "operationId": "SupportController_addMessage",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddTicketMessageDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Add a message to a ticket",
+        "tags": [
+          "support"
+        ]
+      }
+    },
+    "/api/v1/maintenance": {
+      "get": {
+        "operationId": "MaintenanceController_findAll",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "List maintenance windows",
+        "tags": [
+          "maintenance"
+        ]
+      },
+      "post": {
+        "operationId": "MaintenanceController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateMaintenanceDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Create a maintenance window",
+        "tags": [
+          "maintenance"
+        ]
+      }
+    },
+    "/api/v1/maintenance/{id}": {
+      "patch": {
+        "operationId": "MaintenanceController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMaintenanceDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Update a maintenance window",
+        "tags": [
+          "maintenance"
+        ]
+      }
+    },
+    "/api/v1/maintenance/{id}/start": {
+      "post": {
+        "operationId": "MaintenanceController_start",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Start a maintenance window",
+        "tags": [
+          "maintenance"
+        ]
+      }
+    },
+    "/api/v1/maintenance/{id}/complete": {
+      "post": {
+        "operationId": "MaintenanceController_complete",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Complete a maintenance window",
+        "tags": [
+          "maintenance"
+        ]
+      }
+    },
+    "/api/v1/maintenance/{id}/cancel": {
+      "post": {
+        "operationId": "MaintenanceController_cancel",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Cancel a maintenance window",
+        "tags": [
+          "maintenance"
+        ]
+      }
+    },
+    "/api/v1/outbox/events": {
+      "get": {
+        "operationId": "OutboxController_listEvents",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "List outbox events",
+        "tags": [
+          "outbox"
+        ]
+      }
+    },
+    "/api/v1/outbox/events/{id}/retry": {
+      "post": {
+        "operationId": "OutboxController_retry",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Re-queue a failed outbox event",
+        "tags": [
+          "outbox"
+        ]
+      }
+    },
+    "/api/v1/outbox/process": {
+      "post": {
+        "operationId": "OutboxController_process",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Trigger an immediate outbox processing cycle",
+        "tags": [
+          "outbox"
+        ]
+      }
+    },
+    "/api/v1/outbox/dead-letter": {
+      "get": {
+        "operationId": "OutboxController_listDeadLetter",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "List dead-letter events",
+        "tags": [
+          "outbox"
+        ]
+      }
+    },
+    "/api/v1/outbox/dead-letter/{id}/replay": {
+      "post": {
+        "operationId": "OutboxController_replay",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Replay a dead-letter event through the outbox",
+        "tags": [
+          "outbox"
+        ]
+      }
+    },
+    "/api/v1/api-keys": {
+      "get": {
+        "operationId": "SecurityController_listApiKeys",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "List API keys",
+        "tags": [
+          "security"
+        ]
+      },
+      "post": {
+        "operationId": "SecurityController_createApiKey",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateApiKeyDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Create an API key",
+        "tags": [
+          "security"
+        ]
+      }
+    },
+    "/api/v1/api-keys/{id}/revoke": {
+      "post": {
+        "operationId": "SecurityController_revokeApiKey",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Revoke an API key",
+        "tags": [
+          "security"
+        ]
+      }
+    },
+    "/api/v1/webhook-keys": {
+      "get": {
+        "operationId": "SecurityController_listWebhookKeys",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "List webhook keys",
+        "tags": [
+          "security"
+        ]
+      },
+      "post": {
+        "operationId": "SecurityController_createWebhookKey",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateWebhookKeyDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Create a webhook key",
+        "tags": [
+          "security"
+        ]
+      }
+    },
+    "/api/v1/webhook-keys/{id}/revoke": {
+      "post": {
+        "operationId": "SecurityController_revokeWebhookKey",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Revoke a webhook key",
+        "tags": [
+          "security"
+        ]
+      }
+    },
+    "/api/v1/api-consumers": {
+      "get": {
+        "operationId": "SecurityController_listApiConsumers",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "List API consumers",
+        "tags": [
+          "security"
+        ]
+      },
+      "post": {
+        "operationId": "SecurityController_createApiConsumer",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateApiConsumerDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Create an API consumer",
+        "tags": [
+          "security"
+        ]
+      }
+    },
+    "/api/v1/api-consumers/{id}": {
+      "patch": {
+        "operationId": "SecurityController_updateApiConsumer",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateApiConsumerDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Update an API consumer",
+        "tags": [
+          "security"
+        ]
+      }
+    },
+    "/api/v1/api-consumers/{id}/rotate-secret": {
+      "post": {
+        "operationId": "SecurityController_rotateApiConsumerSecret",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Rotate an API consumer secret",
+        "tags": [
+          "security"
+        ]
+      }
+    },
+    "/api/v1/blocked-ips": {
+      "get": {
+        "operationId": "SecurityController_listBlockedIps",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "List blocked IPs",
+        "tags": [
+          "security"
+        ]
+      },
+      "post": {
+        "operationId": "SecurityController_blockIp",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateBlockedIpDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Block an IP address",
+        "tags": [
+          "security"
+        ]
+      }
+    },
+    "/api/v1/blocked-ips/{id}/unblock": {
+      "post": {
+        "operationId": "SecurityController_unblockIp",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Unblock an IP address",
+        "tags": [
+          "security"
+        ]
+      }
+    },
+    "/api/v1/sessions": {
+      "get": {
+        "operationId": "SecurityController_listSessions",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "List platform sessions",
+        "tags": [
+          "security"
+        ]
+      }
+    },
+    "/api/v1/sessions/{id}/revoke": {
+      "post": {
+        "operationId": "SecurityController_revokeSession",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Revoke a platform session",
+        "tags": [
+          "security"
+        ]
+      }
+    },
+    "/api/v1/login-attempts": {
+      "get": {
+        "operationId": "SecurityController_listLoginAttempts",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "List login attempts",
+        "tags": [
+          "security"
+        ]
+      }
+    },
+    "/api/v1/notifications": {
+      "get": {
+        "operationId": "CommunicationsController_listNotifications",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "List notifications (self by default)",
+        "tags": [
+          "communications"
+        ]
+      }
+    },
+    "/api/v1/notifications/{id}/read": {
+      "post": {
+        "operationId": "CommunicationsController_markRead",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Mark a notification as read",
+        "tags": [
+          "communications"
+        ]
+      }
+    },
+    "/api/v1/notifications/read-all": {
+      "post": {
+        "operationId": "CommunicationsController_markAllRead",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Mark all notifications as read",
+        "tags": [
+          "communications"
+        ]
+      }
+    },
+    "/api/v1/announcements": {
+      "get": {
+        "operationId": "CommunicationsController_listAnnouncements",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "List announcements",
+        "tags": [
+          "communications"
+        ]
+      },
+      "post": {
+        "operationId": "CommunicationsController_createAnnouncement",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAnnouncementDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Create an announcement",
+        "tags": [
+          "communications"
+        ]
+      }
+    },
+    "/api/v1/announcements/{id}": {
+      "patch": {
+        "operationId": "CommunicationsController_updateAnnouncement",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAnnouncementDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Update an announcement",
+        "tags": [
+          "communications"
+        ]
+      }
+    },
+    "/api/v1/announcements/{id}/publish": {
+      "post": {
+        "operationId": "CommunicationsController_publishAnnouncement",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Publish an announcement",
+        "tags": [
+          "communications"
+        ]
+      }
+    },
+    "/api/v1/announcements/{id}/cancel": {
+      "post": {
+        "operationId": "CommunicationsController_cancelAnnouncement",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Cancel an announcement",
+        "tags": [
+          "communications"
+        ]
+      }
+    },
+    "/api/v1/broadcasts": {
+      "get": {
+        "operationId": "CommunicationsController_listBroadcasts",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "List broadcasts",
+        "tags": [
+          "communications"
+        ]
+      },
+      "post": {
+        "operationId": "CommunicationsController_createBroadcast",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateBroadcastDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Create a broadcast",
+        "tags": [
+          "communications"
+        ]
+      }
+    },
+    "/api/v1/broadcasts/{id}/send": {
+      "post": {
+        "operationId": "CommunicationsController_sendBroadcast",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Send a broadcast",
+        "tags": [
+          "communications"
+        ]
+      }
+    },
+    "/api/v1/platform/settings": {
+      "get": {
+        "operationId": "PlatformConfigController_listSettings",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "List platform settings",
+        "tags": [
+          "platform-config"
+        ]
+      }
+    },
+    "/api/v1/platform/settings/{key}": {
+      "patch": {
+        "operationId": "PlatformConfigController_updateSetting",
+        "parameters": [
+          {
+            "name": "key",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePlatformSettingDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Update a platform setting (secrets are rotated + history kept)",
+        "tags": [
+          "platform-config"
+        ]
+      }
+    },
+    "/api/v1/platform/feature-flags": {
+      "get": {
+        "operationId": "PlatformConfigController_listFlags",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "List feature flags",
+        "tags": [
+          "platform-config"
+        ]
+      },
+      "post": {
+        "operationId": "PlatformConfigController_createFlag",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateFeatureFlagDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "summary": "Create a feature flag",
+        "tags": [
+          "platform-config"
+        ]
+      }
+    },
+    "/api/v1/platform/feature-flags/{id}": {
+      "patch": {
+        "operationId": "PlatformConfigController_updateFlag",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateFeatureFlagDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Update a feature flag",
+        "tags": [
+          "platform-config"
+        ]
+      }
+    }
+  },
+  "info": {
+    "title": "PEB SUPER-ADMIN Platform API",
+    "description": "Enterprise SaaS control plane API",
+    "version": "1.0",
+    "contact": {}
+  },
+  "tags": [
+    {
+      "name": "health",
+      "description": "Health checks"
+    }
+  ],
+  "servers": [],
+  "components": {
+    "securitySchemes": {
+      "bearer": {
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "type": "http"
+      },
+      "api-key": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-API-Key"
+      }
+    },
+    "schemas": {
+      "LoginDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "RefreshTokenDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "ChangePasswordDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "ForgotPasswordDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "ResetPasswordDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "CreateUserDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "UpdateUserDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "SuspendUserDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "AdminResetPasswordDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "CreateRoleDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "UpdateRoleDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "AssignPermissionsDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "CreateTenantDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "UpdateTenantDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "SuspendTenantDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "SetTenantSettingDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "UpdateTenantSettingDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "CreatePlanDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "UpdatePlanDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "CreateSubscriptionDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "UpdateSubscriptionDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "CreateInvoiceDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "RecordPaymentDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "CreateTicketDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "UpdateTicketDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "AddTicketMessageDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "CreateMaintenanceDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "UpdateMaintenanceDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "CreateApiKeyDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "CreateWebhookKeyDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "CreateApiConsumerDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "UpdateApiConsumerDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "CreateBlockedIpDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "CreateAnnouncementDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "UpdateAnnouncementDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "CreateBroadcastDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "UpdatePlatformSettingDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "CreateFeatureFlagDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "UpdateFeatureFlagDto": {
+        "type": "object",
+        "properties": {}
+      }
+    }
+  }
+}

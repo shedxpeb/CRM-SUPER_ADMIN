@@ -40,6 +40,11 @@ export class CreateTenantUserDto {
   role?: string;
 
   @IsOptional()
+  @IsString()
+  @Length(8, 72)
+  password?: string;
+
+  @IsOptional()
   @IsBoolean()
   isActive?: boolean;
 }
@@ -122,4 +127,28 @@ export class SetTenantRolePermissionsDto {
   @IsArray()
   @IsString({ each: true })
   permissions: string[];
+}
+
+export class SetTenantUserPermissionsDto {
+  // Permission keys explicitly granted to the user (beyond their roles).
+  @IsArray()
+  @IsString({ each: true })
+  granted: string[];
+
+  // Permission keys explicitly denied to the user (overrides role grants).
+  @IsArray()
+  @IsString({ each: true })
+  denied: string[];
+}
+
+export class SetTenantUserModulesDto {
+  // Module keys explicitly allowed for the user (re-enables even if org off).
+  @IsArray()
+  @IsString({ each: true })
+  allowed: string[];
+
+  // Module keys explicitly denied for the user (deny wins over org default).
+  @IsArray()
+  @IsString({ each: true })
+  denied: string[];
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import {
   ArrowLeft,
@@ -11,7 +11,6 @@ import {
   HardDrive,
   Activity,
   History,
-  UserCog,
   Calendar,
   Mail,
   Globe,
@@ -38,19 +37,26 @@ import {
   useTenantActivity,
   useTenantUsers,
   useTenantRoles,
-  useTenantImpersonations,
   useSuspendTenant,
   useUnsuspendTenant,
   useUpdateTenant,
   useAuditLogs,
-  useImpersonateTenant,
   useTenantModules,
   useTenantLoginHistory,
   useUpdateTenantModules,
-  useTenantPermissions,
   useTenantAssignableRoles,
   useCreateTenantUser,
   useCreateTenantRole,
+  useModuleCatalog,
+  usePermissionCatalog,
+  useSetTenantRolePermissions,
+  useUserRoles,
+  useAssignTenantUserRole,
+  useRemoveTenantUserRoles,
+  useUserPermissions,
+  useSetUserPermissions,
+  useUserModules,
+  useSetUserModules,
 } from '@/lib/queries';
 import { Can } from '@/features/auth/rbac';
 import { RouteGuard } from '@/features/auth/RouteGuard';
@@ -58,8 +64,7 @@ import { formatDate, formatNumber, formatBytes, timeAgo } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { DataTable, Pagination } from '@/components/sa/DataTable';
 import type { ColumnDef } from '@tanstack/react-table';
-import { CRM_MODULES } from '@/lib/types';
-import type { TenantActivityEntry, ImpersonationLog, AuditLogEntry, TenantUser, TenantRole } from '@/lib/types';
+import type { TenantActivityEntry, AuditLogEntry, TenantUser, TenantRole } from '@/lib/types';
 import {
   Dialog,
   DialogContent,
@@ -71,12 +76,10 @@ const TABS = [
   { key: 'overview', label: 'Overview', icon: Activity },
   { key: 'users', label: 'Users', icon: Users },
   { key: 'roles', label: 'Roles', icon: ShieldCheck },
-  { key: 'permissions', label: 'Permissions', icon: Key },
-  { key: 'modules', label: 'Modules', icon: Puzzle },
+  { key: 'module-access', label: 'Module Access', icon: Puzzle },
   { key: 'activity', label: 'Activity', icon: History },
   { key: 'login-history', label: 'Login History', icon: LogIn },
   { key: 'audit-logs', label: 'Audit Logs', icon: FileText },
-  { key: 'impersonations', label: 'Impersonation Logs', icon: UserCog },
   { key: 'settings', label: 'Settings', icon: Settings2 },
 ] as const;
 
@@ -129,30 +132,32 @@ export default function TenantDetailPage() {
   const searchParams = useSearchParams();
   const id = params.id;
 
-  const [tab, setTab] = useState<string>(searchParams.get('tab') ?? 'overview');
+  const [tab, setTab] = useState<string>(() => {
+    // Legacy tabs: 'permissions' (per-role CRUD matrix) and 'modules' were merged
+    // into a single tenant-level 'module-access' tab with ON/OFF switches only.
+    const t = searchParams.get('tab') ?? 'overview';
+    return t === 'permissions' || t === 'modules' ? 'module-access' : t;
+  });
   const [activityPage, setActivityPage] = useState(1);
   const [usersPage, setUsersPage] = useState(1);
   const [rolesPage, setRolesPage] = useState(1);
   const [loginHistoryPage, setLoginHistoryPage] = useState(1);
-  const [impPage, setImpPage] = useState(1);
   const [auditPage, setAuditPage] = useState(1);
-  const [impersonateOpen, setImpersonateOpen] = useState(false);
-  const [impersonateReason, setImpersonateReason] = useState('');
   const [createUserOpen, setCreateUserOpen] = useState(false);
   const [createRoleOpen, setCreateRoleOpen] = useState(false);
+  const [editPermissionsRole, setEditPermissionsRole] = useState<TenantRole | null>(null);
+  const [accessControlUser, setAccessControlUser] = useState<TenantUser | null>(null);
 
   const tenant = useTenant(id);
   const activity = useTenantActivity(id, { page: activityPage, pageSize: 15 });
   const users = useTenantUsers(id, { page: usersPage, pageSize: 15 });
   const roles = useTenantRoles(id, { page: rolesPage, pageSize: 15 });
   const loginHistory = useTenantLoginHistory(id, { page: loginHistoryPage, pageSize: 15 });
-  const impersonations = useTenantImpersonations(id, { page: impPage, pageSize: 15 });
   const auditLogs = useAuditLogs({ page: auditPage, pageSize: 15, tenantId: id });
   const tenantModules = useTenantModules(id);
   const suspend = useSuspendTenant();
   const unsuspend = useUnsuspendTenant();
   const updateTenant = useUpdateTenant();
-  const impersonate = useImpersonateTenant();
   const updateTenantModules = useUpdateTenantModules();
   const assignableRoles = useTenantAssignableRoles(id);
 
@@ -165,17 +170,6 @@ export default function TenantDetailPage() {
   const selectTab = (key: string) => {
     setTab(key);
     router.replace(`/super-admin/tenants/${id}?tab=${key}`, { scroll: false });
-  };
-
-  const handleImpersonate = async () => {
-    const res = await impersonate.mutateAsync({
-      id,
-      reason: impersonateReason || 'Console impersonation',
-    });
-    if (res?.token) {
-      localStorage.setItem('sa_impersonation_grant', res.token);
-    }
-    setImpersonateOpen(false);
   };
 
   return (
@@ -199,12 +193,6 @@ export default function TenantDetailPage() {
               <health.icon className="h-3 w-3" />
               {health.label}
             </Badge>
-            <Can required="organization:impersonate">
-              <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => setImpersonateOpen(true)}>
-                <UserCog className="h-3.5 w-3.5" />
-                Login As Tenant
-              </Button>
-            </Can>
             <Can required="organization:suspend">
               {t.status === 'SUSPENDED' ? (
                 <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => unsuspend.mutate({ id })}>
@@ -342,7 +330,7 @@ export default function TenantDetailPage() {
             ) : (
               <>
                 <DataTable
-                  columns={usersColumns}
+                  columns={usersColumns((user) => setAccessControlUser(user))}
                   data={users.data?.data ?? []}
                   isLoading={users.isLoading}
                   isError={users.isError}
@@ -373,7 +361,7 @@ export default function TenantDetailPage() {
             ) : (
               <>
                 <DataTable
-                  columns={tenantRolesColumns}
+                  columns={tenantRolesColumns((role) => setEditPermissionsRole(role))}
                   data={roles.data?.data ?? []}
                   isLoading={roles.isLoading}
                   isError={roles.isError}
@@ -387,23 +375,15 @@ export default function TenantDetailPage() {
         </Card>
       )}
 
-      {tab === 'permissions' && (
+      {tab === 'module-access' && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base text-sa-text">Permissions Matrix</CardTitle>
+            <CardTitle className="text-base text-sa-text">Module Access</CardTitle>
           </CardHeader>
           <CardContent>
-            <PermissionsMatrix tenantId={id} modules={CRM_MODULES} />
-          </CardContent>
-        </Card>
-      )}
-
-      {tab === 'modules' && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base text-sa-text">CRM Modules</CardTitle>
-          </CardHeader>
-          <CardContent>
+            <p className="text-xs text-sa-text-muted mb-4">
+              Tenant-level module visibility. Detailed CRUD permissions are managed per role in the Roles tab.
+            </p>
             {tenantModules.isLoading ? (
               <LoadingState label="Loading modules…" />
             ) : tenantModules.isError ? (
@@ -508,67 +488,22 @@ export default function TenantDetailPage() {
         </Card>
       )}
       {tab === 'settings' && <SettingsTab tenant={t} saving={updateTenant.isPending} onSave={(input) => updateTenant.mutate({ id, input })} />}
-      {tab === 'impersonations' && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base text-sa-text">Impersonation Logs</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {impersonations.isLoading ? (
-              <LoadingState label="Loading impersonation logs…" />
-            ) : impersonations.isError ? (
-              <ErrorState message="Failed to load impersonation logs" onRetry={impersonations.refetch} />
-            ) : (
-              <>
-                <DataTable
-                  columns={impersonationColumns}
-                  data={impersonations.data?.data ?? []}
-                  isLoading={impersonations.isLoading}
-                  isError={impersonations.isError}
-                  onRetry={impersonations.refetch}
-                  emptyMessage="No impersonation sessions recorded"
-                />
-                <Pagination page={impPage} pageSize={15} total={impersonations.data?.meta?.total ?? 0} onPageChange={setImpPage} />
-              </>
-            )}
-          </CardContent>
-        </Card>
-      )}
-      {impersonateOpen && (
-        <Dialog open onOpenChange={() => setImpersonateOpen(false)}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Impersonate {t.name}</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4 pt-2">
-              <p className="text-sm text-sa-text-muted">
-                You&apos;ll receive a scoped grant token to access this tenant as its super admin. The session is
-                audited and expires in 30 minutes.
-              </p>
-              <Input
-                placeholder="Reason (audit log)"
-                value={impersonateReason}
-                onChange={(e) => setImpersonateReason(e.target.value)}
-              />
-              <div className="flex justify-end gap-2">
-                <Button variant="ghost" onClick={() => setImpersonateOpen(false)}>
-                  Cancel
-                </Button>
-                <Button
-                  disabled={impersonate.isPending}
-                  onClick={handleImpersonate}
-                  className="gap-2"
-                >
-                  <UserCog className="h-4 w-4" />
-                  Start Session
-                </Button>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
-      )}
       {createUserOpen && <AddTenantUserDialog tenantId={id} roles={assignableRoles.data ?? []} onClose={() => setCreateUserOpen(false)} onError={(e) => console.error(e)} />}
       {createRoleOpen && <AddTenantRoleDialog tenantId={id} onClose={() => setCreateRoleOpen(false)} onError={(e) => console.error(e)} />}
+      {editPermissionsRole && (
+        <RolePermissionsDialog
+          tenantId={id}
+          role={editPermissionsRole}
+          onClose={() => setEditPermissionsRole(null)}
+        />
+      )}
+      {accessControlUser && (
+        <UserAccessControlDialog
+          tenantId={id}
+          user={accessControlUser}
+          onClose={() => setAccessControlUser(null)}
+        />
+      )}
       </div>
     </RouteGuard>
   );
@@ -588,6 +523,7 @@ function AddTenantUserDialog({
   const createUser = useCreateTenantUser();
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
+  const [password, setPassword] = useState('');
   const [role, setRole] = useState('');
   const [submitted, setSubmitted] = useState(false);
 
@@ -595,7 +531,15 @@ function AddTenantUserDialog({
     setSubmitted(true);
     if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return;
     try {
-      await createUser.mutateAsync({ id: tenantId, input: { email: email.trim(), name: name.trim() || undefined, role: role || undefined } });
+      await createUser.mutateAsync({
+        id: tenantId,
+        input: {
+          email: email.trim(),
+          name: name.trim() || undefined,
+          password: password || undefined,
+          role: role || undefined,
+        },
+      });
       onClose();
     } catch (e) {
       onError(e);
@@ -620,6 +564,22 @@ function AddTenantUserDialog({
             <label className="block text-xs font-medium mb-1.5 text-sa-text-muted">Name</label>
             <Input placeholder="Jane Doe" value={name} onChange={(e) => setName(e.target.value)} />
           </div>
+          <div>
+            <label className="block text-xs font-medium mb-1.5 text-sa-text-muted">
+              Password <span className="text-sa-text-dim">(optional)</span>
+            </label>
+            <Input
+              type="password"
+              minLength={8}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Min 8 characters"
+              autoComplete="new-password"
+            />
+            <p className="text-xs text-sa-text-dim mt-1">
+              Leave blank to let the user set their own password via email OTP (Forgot password).
+            </p>
+          </div>
           {roles.length > 0 && (
             <div>
               <label className="block text-xs font-medium mb-1.5 text-sa-text-muted">Role</label>
@@ -628,7 +588,6 @@ function AddTenantUserDialog({
                 value={role}
                 onChange={(e) => setRole(e.target.value)}
               >
-                <option value="">Default</option>
                 {roles.map((r) => (
                   <option key={r.id} value={r.code}>{r.name}</option>
                 ))}
@@ -787,13 +746,25 @@ function SettingsTab({
   );
 }
 
-const usersColumns: ColumnDef<TenantUser, unknown>[] = [
-  { accessorKey: 'name', header: 'Name', cell: ({ row }) => <span className="text-sm text-sa-text-secondary">{row.original.name ?? row.original.email}</span> },
-  { accessorKey: 'email', header: 'Email', cell: ({ row }) => <span className="text-xs text-sa-text-muted">{row.original.email}</span> },
-  { accessorKey: 'role', header: 'Role', cell: ({ row }) => <span className="text-xs text-sa-text-secondary">{row.original.role ?? '—'}</span> },
-  { accessorKey: 'lastLogin', header: 'Last Login', cell: ({ row }) => <span className="text-xs text-sa-text-muted">{row.original.lastLogin ? timeAgo(row.original.lastLogin) : '—'}</span> },
-  { accessorKey: 'isActive', header: 'Status', cell: ({ row }) => <StatusBadge status={row.original.isActive ? 'ACTIVE' : 'INACTIVE'} /> },
-];
+function usersColumns(onAccessControl: (user: TenantUser) => void): ColumnDef<TenantUser, unknown>[] {
+  return [
+    { accessorKey: 'name', header: 'Name', cell: ({ row }) => <span className="text-sm text-sa-text-secondary">{row.original.name ?? row.original.email}</span> },
+    { accessorKey: 'email', header: 'Email', cell: ({ row }) => <span className="text-xs text-sa-text-muted">{row.original.email}</span> },
+    { accessorKey: 'role', header: 'Role', cell: ({ row }) => <span className="text-xs text-sa-text-secondary">{row.original.role ?? '—'}</span> },
+    { accessorKey: 'lastLogin', header: 'Last Login', cell: ({ row }) => <span className="text-xs text-sa-text-muted">{row.original.lastLogin ? timeAgo(row.original.lastLogin) : '—'}</span> },
+    { accessorKey: 'isActive', header: 'Status', cell: ({ row }) => <StatusBadge status={row.original.isActive ? 'ACTIVE' : 'INACTIVE'} /> },
+    {
+      id: 'access',
+      header: '',
+      cell: ({ row }) => (
+        <Button variant="outline" size="sm" className="gap-1.5" onClick={() => onAccessControl(row.original)}>
+          <Key className="h-3.5 w-3.5" />
+          Access Control
+        </Button>
+      ),
+    },
+  ];
+}
 
 const auditColumns: ColumnDef<AuditLogEntry, unknown>[] = [
   { accessorKey: 'action', header: 'Action', cell: ({ row }) => <span className="text-sm text-sa-text-secondary">{row.original.action}</span> },
@@ -803,27 +774,31 @@ const auditColumns: ColumnDef<AuditLogEntry, unknown>[] = [
   { accessorKey: 'createdAt', header: 'Time', cell: ({ row }) => <span className="text-xs text-sa-text-muted">{timeAgo(row.original.createdAt)}</span> },
 ];
 
-const impersonationColumns: ColumnDef<ImpersonationLog, unknown>[] = [
-  { accessorKey: 'superAdminEmail', header: 'Super Admin', cell: ({ row }) => <span className="text-sm text-sa-text-secondary">{row.original.superAdminEmail}</span> },
-  { accessorKey: 'targetUserEmail', header: 'As User', cell: ({ row }) => <span className="text-xs text-sa-text-muted">{row.original.targetUserEmail ?? '—'}</span> },
-  { accessorKey: 'reason', header: 'Reason', cell: ({ row }) => <span className="text-xs text-sa-text-muted">{row.original.reason ?? '—'}</span> },
-  { accessorKey: 'startedAt', header: 'Started', cell: ({ row }) => <span className="text-xs text-sa-text-muted">{timeAgo(row.original.startedAt)}</span> },
-  {
-    accessorKey: 'durationSeconds',
-    header: 'Duration',
-    cell: ({ row }) => (
-      <span className="text-xs text-sa-text-secondary">
-        {row.original.durationSeconds != null ? `${Math.round(row.original.durationSeconds / 60)}m` : 'active'}
-      </span>
-    ),
-  },
-];
-const tenantRolesColumns: ColumnDef<TenantRole, unknown>[] = [
-  { accessorKey: 'name', header: 'Role', cell: ({ row }) => <span className="text-sm text-sa-text-secondary">{row.original.name}</span> },
-  { accessorKey: 'code', header: 'Code', cell: ({ row }) => <span className="text-xs font-mono text-sa-text-dim">{row.original.code}</span> },
-  { accessorKey: 'description', header: 'Description', cell: ({ row }) => <span className="text-xs text-sa-text-muted">{row.original.description ?? '—'}</span> },
-  { accessorKey: 'isSystem', header: 'System', cell: ({ row }) => <Badge variant={row.original.isSystem ? 'secondary' : 'outline'} className="text-[10px]">{row.original.isSystem ? 'Yes' : 'No'}</Badge> },
-];
+function tenantRolesColumns(onEditPermissions: (role: TenantRole) => void): ColumnDef<TenantRole, unknown>[] {
+  return [
+    { accessorKey: 'name', header: 'Role', cell: ({ row }) => <span className="text-sm text-sa-text-secondary">{row.original.name}</span> },
+    { accessorKey: 'code', header: 'Code', cell: ({ row }) => <span className="text-xs font-mono text-sa-text-dim">{row.original.code}</span> },
+    {
+      accessorKey: 'permissions',
+      header: 'Permissions',
+      cell: ({ row }) => (
+        <span className="text-xs text-sa-text-muted">{(row.original.permissions ?? []).length} granted</span>
+      ),
+    },
+    { accessorKey: 'description', header: 'Description', cell: ({ row }) => <span className="text-xs text-sa-text-muted">{row.original.description ?? '—'}</span> },
+    { accessorKey: 'isSystem', header: 'System', cell: ({ row }) => <Badge variant={row.original.isSystem ? 'secondary' : 'outline'} className="text-[10px]">{row.original.isSystem ? 'Yes' : 'No'}</Badge> },
+    {
+      id: 'actions',
+      header: '',
+      cell: ({ row }) => (
+        <Button variant="outline" size="sm" className="gap-1.5" onClick={() => onEditPermissions(row.original)}>
+          <Key className="h-3.5 w-3.5" />
+          Edit Permissions
+        </Button>
+      ),
+    },
+  ];
+}
 
 const loginHistoryColumns: ColumnDef<any, unknown>[] = [
   { accessorKey: 'email', header: 'Email', cell: ({ row }) => <span className="text-xs text-sa-text-secondary">{row.original.email}</span> },
@@ -834,53 +809,453 @@ const loginHistoryColumns: ColumnDef<any, unknown>[] = [
   { accessorKey: 'createdAt', header: 'Time', cell: ({ row }) => <span className="text-xs text-sa-text-muted">{timeAgo(row.original.createdAt)}</span> },
 ];
 
-// Permissions Matrix Component
-function PermissionsMatrix({ tenantId, modules }: { tenantId: string; modules: typeof CRM_MODULES }) {
-  const permissions = useTenantPermissions(tenantId);
+// ── Editable permission matrix ──────────────────────────────────────────────
+// Renders the full CRM permission catalog as a checkbox grid for one role and
+// saves the selection through the SUPER API (which syncs straight to CRM).
+function RolePermissionMatrix({
+  tenantId,
+  role,
+  onSaved,
+}: {
+  tenantId: string;
+  role: TenantRole;
+  onSaved?: () => void;
+}) {
+  const catalog = usePermissionCatalog(tenantId);
+  const setPerms = useSetTenantRolePermissions();
+  const [selected, setSelected] = useState<Set<string>>(() => new Set(role.permissions ?? []));
+  const [dirty, setDirty] = useState(false);
 
-  if (permissions.isLoading) return <LoadingState label="Loading permissions…" />;
-  if (permissions.isError) return <ErrorState message="Failed to load permissions" onRetry={permissions.refetch} />;
+  useEffect(() => {
+    setSelected(new Set(role.permissions ?? []));
+    setDirty(false);
+  }, [role.id, role.permissions]);
 
-  const perms = permissions.data ?? {};
-  const ACTIONS = ['read', 'create', 'update', 'delete', 'export', 'approve'] as const;
+  if (catalog.isLoading) return <LoadingState label="Loading permission catalog…" />;
+  if (catalog.isError) return <ErrorState message="Failed to load permission catalog" onRetry={catalog.refetch} />;
+
+  const groups = catalog.data ?? {};
+  const moduleKeys = Object.keys(groups).sort();
+
+  const toggle = (perm: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(perm)) next.delete(perm);
+      else next.add(perm);
+      return next;
+    });
+    setDirty(true);
+  };
+
+  const toggleGroup = (perms: string[]) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      const allChecked = perms.every((p) => next.has(p));
+      if (allChecked) perms.forEach((p) => next.delete(p));
+      else perms.forEach((p) => next.add(p));
+      return next;
+    });
+    setDirty(true);
+  };
+
+  const handleSave = async () => {
+    await setPerms.mutateAsync({ id: tenantId, roleId: role.id, permissions: Array.from(selected) });
+    setDirty(false);
+    onSaved?.();
+  };
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-left text-xs border-collapse">
-        <thead>
-          <tr className="border-b border-sa-border">
-            <th className="py-3 px-4 font-medium text-sa-text-muted sticky left-0 bg-sa-card">Module</th>
-            {ACTIONS.map((a) => (
-              <th key={a} className="py-3 px-3 font-medium text-sa-text-muted text-center capitalize">{a}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {modules.map((module) => (
-            <tr key={module.key} className="border-b border-sa-border last:border-0 hover:bg-sa-row-hover">
-              <td className="py-3 px-4 text-sa-text-secondary font-medium whitespace-nowrap sticky left-0 bg-sa-card">
-                <div className="flex items-center gap-2">
-                  <span className="text-sa-text-muted">{module.icon}</span>
-                  {module.label}
-                </div>
-              </td>
-              {ACTIONS.map((action) => {
-                const granted = perms[module.key]?.[`${module.key}:${action}`] ?? false;
-                return (
-                  <td key={action} className="py-3 px-3 text-center">
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-medium text-sa-text">
+          {role.name}
+          <span className="ml-2 text-xs text-sa-text-muted">({selected.size} permissions)</span>
+        </p>
+        <Button size="sm" disabled={!dirty || setPerms.isPending} onClick={handleSave} className="gap-1.5">
+          <Save className="h-3.5 w-3.5" />
+          {setPerms.isPending ? 'Saving…' : 'Save Changes'}
+        </Button>
+      </div>
+      {moduleKeys.length === 0 ? (
+        <p className="text-sm text-sa-text-muted py-6 text-center">No permissions available</p>
+      ) : (
+        <div className="rounded-lg border border-sa-border overflow-hidden">
+          {moduleKeys.map((modKey, idx) => {
+            const perms = groups[modKey];
+            const allChecked = perms.every((p) => selected.has(p));
+            const someChecked = perms.some((p) => selected.has(p));
+            return (
+              <div key={modKey} className={idx > 0 ? 'border-t border-sa-border' : ''}>
+                <div className="flex items-center justify-between px-3 py-2 bg-sa-card-solid">
+                  <label className="flex items-center gap-2 cursor-pointer">
                     <input
                       type="checkbox"
-                      checked={granted}
-                      disabled
-                      className="h-4 w-4 accent-sa-accent"
+                      checked={allChecked}
+                      ref={(el) => {
+                        if (el) el.indeterminate = someChecked && !allChecked;
+                      }}
+                      onChange={() => toggleGroup(perms)}
+                      className="h-4 w-4 accent-[var(--sa-accent)]"
                     />
-                  </td>
-                );
-              })}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+                    <span className="text-xs font-semibold text-sa-text-secondary uppercase tracking-wider capitalize">
+                      {modKey.replace(/-/g, ' ')}
+                    </span>
+                  </label>
+                </div>
+                <div className="px-3 py-2.5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1.5">
+                  {perms.map((perm) => (
+                    <label key={perm} className="flex items-center gap-2 cursor-pointer rounded-md px-2 py-1 hover:bg-sa-chart-bg">
+                      <input
+                        type="checkbox"
+                        checked={selected.has(perm)}
+                        onChange={() => toggle(perm)}
+                        className="h-3.5 w-3.5 accent-[var(--sa-accent)]"
+                      />
+                      <span className="text-xs font-mono text-sa-text-secondary">{perm}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {setPerms.isError && (
+        <p className="text-xs text-red-400">Failed to save permissions. Please try again.</p>
+      )}
+    </div>
+  );
+}
+
+function RolePermissionsDialog({
+  tenantId,
+  role,
+  onClose,
+}: {
+  tenantId: string;
+  role: TenantRole;
+  onClose: () => void;
+}) {
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="max-h-[80vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Edit Permissions — {role.name}</DialogTitle>
+        </DialogHeader>
+        <div className="pt-2">
+          <RolePermissionMatrix tenantId={tenantId} role={role} onSaved={onClose} />
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── User Access Control dialog ───────────────────────────────────────────────
+// Per-user tabs: Role Assignment, Direct Permissions (grant/deny), Module Access.
+function UserAccessControlDialog({
+  tenantId,
+  user,
+  onClose,
+}: {
+  tenantId: string;
+  user: TenantUser;
+  onClose: () => void;
+}) {
+  const [tab, setTab] = useState<'roles' | 'permissions' | 'modules'>('roles');
+
+  const tabButton = (key: typeof tab, label: string, icon: React.ReactNode) => (
+    <button
+      key={key}
+      onClick={() => setTab(key)}
+      className={cn(
+        'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors',
+        tab === key
+          ? 'bg-[var(--sa-accent)] text-white'
+          : 'text-sa-text-muted hover:bg-sa-card-solid hover:text-sa-text-secondary',
+      )}
+    >
+      {icon}
+      {label}
+    </button>
+  );
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Access Control — {user.name ?? user.email}</DialogTitle>
+        </DialogHeader>
+        <div className="flex items-center gap-1 pt-1 pb-3 border-b border-sa-border">
+          {tabButton('roles', 'Role Assignment', <ShieldCheck className="h-3.5 w-3.5" />)}
+          {tabButton('permissions', 'Direct Permissions', <Key className="h-3.5 w-3.5" />)}
+          {tabButton('modules', 'Module Access', <Puzzle className="h-3.5 w-3.5" />)}
+        </div>
+        <div className="pt-4">
+          {tab === 'roles' && <UserRoleAssignment tenantId={tenantId} userId={user.id} />}
+          {tab === 'permissions' && <UserDirectPermissions tenantId={tenantId} userId={user.id} />}
+          {tab === 'modules' && <UserModuleAccessEditor tenantId={tenantId} userId={user.id} />}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function UserRoleAssignment({ tenantId, userId }: { tenantId: string; userId: string }) {
+  const roles = useTenantAssignableRoles(tenantId);
+  const userRoles = useUserRoles(tenantId, userId);
+  const assign = useAssignTenantUserRole();
+  const removeAll = useRemoveTenantUserRoles();
+
+  if (roles.isLoading || userRoles.isLoading) return <LoadingState label="Loading roles…" />;
+  if (roles.isError || userRoles.isError)
+    return <ErrorState message="Failed to load roles" onRetry={() => { roles.refetch(); userRoles.refetch(); }} />;
+
+  const assigned = userRoles.data ?? [];
+  const available = (roles.data ?? []).filter((r) => !assigned.some((a) => a.id === r.id));
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <p className="text-xs font-semibold text-sa-text-secondary uppercase tracking-wider mb-2">Assigned roles</p>
+        {assigned.length === 0 ? (
+          <p className="text-sm text-sa-text-muted">No roles assigned</p>
+        ) : (
+          <div className="flex flex-wrap gap-1.5">
+            {assigned.map((r) => (
+              <span key={r.id} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-sa-border bg-sa-chart-bg text-xs text-sa-text-secondary">
+                <ShieldCheck className="h-3 w-3 text-green-500" />
+                {r.name}
+                <button
+                  onClick={() => removeAll.mutate({ id: tenantId, userId })}
+                  className="text-sa-text-muted hover:text-red-400"
+                  title="Remove role"
+                >
+                  <XCircle className="h-3 w-3" />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+      <div>
+        <p className="text-xs font-semibold text-sa-text-secondary uppercase tracking-wider mb-2">Assign a role</p>
+        {available.length === 0 ? (
+          <p className="text-sm text-sa-text-muted">All roles already assigned</p>
+        ) : (
+          <div className="flex flex-wrap gap-1.5">
+            {available.map((r) => (
+              <button
+                key={r.id}
+                disabled={assign.isPending}
+                onClick={() => assign.mutate({ id: tenantId, userId, roleId: r.id })}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-sa-border text-xs text-sa-text-muted hover:border-sa-accent hover:text-sa-accent disabled:opacity-50"
+              >
+                <UserPlus className="h-3 w-3" />
+                {r.name}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      <p className="text-xs text-sa-text-dim">
+        Effective permissions = role permissions + granted direct permissions − denied direct permissions.
+      </p>
+    </div>
+  );
+}
+
+function UserDirectPermissions({ tenantId, userId }: { tenantId: string; userId: string }) {
+  const catalog = usePermissionCatalog(tenantId);
+  const overrides = useUserPermissions(tenantId, userId);
+  const save = useSetUserPermissions();
+  const [granted, setGranted] = useState<Set<string>>(new Set());
+  const [denied, setDenied] = useState<Set<string>>(new Set());
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    if (overrides.data && !loaded) {
+      setGranted(new Set(overrides.data.granted));
+      setDenied(new Set(overrides.data.denied));
+      setLoaded(true);
+    }
+  }, [overrides.data, loaded]);
+
+  if (catalog.isLoading || overrides.isLoading) return <LoadingState label="Loading permissions…" />;
+  if (catalog.isError || overrides.isError)
+    return <ErrorState message="Failed to load permissions" onRetry={() => { catalog.refetch(); overrides.refetch(); }} />;
+
+  const groups = catalog.data ?? {};
+  const dirty = !loaded || (overrides.data !== undefined && (granted.size !== overrides.data.granted.length || denied.size !== overrides.data.denied.length));
+
+  const toggle = (perm: string, type: 'grant' | 'deny') => {
+    const [setA, setB] = type === 'grant' ? [setGranted, setDenied] : [setDenied, setGranted];
+    setA((prev) => {
+      const next = new Set(prev);
+      if (next.has(perm)) next.delete(perm);
+      else next.add(perm);
+      return next;
+    });
+    setB((prev) => {
+      const next = new Set(prev);
+      next.delete(perm);
+      return next;
+    });
+  };
+
+  const handleSave = async () => {
+    await save.mutateAsync({
+      id: tenantId,
+      userId,
+      input: { granted: Array.from(granted), denied: Array.from(denied) },
+    });
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-lg border border-sa-border overflow-hidden">
+        {Object.keys(groups).sort().map((modKey, idx) => (
+          <div key={modKey} className={idx > 0 ? 'border-t border-sa-border' : ''}>
+            <p className="px-3 py-2 bg-sa-card-solid text-xs font-semibold text-sa-text-secondary uppercase tracking-wider capitalize">
+              {modKey.replace(/-/g, ' ')}
+            </p>
+            <div className="px-3 py-2 grid grid-cols-1 sm:grid-cols-2 gap-1">
+              {groups[modKey].map((perm) => (
+                <div key={perm} className="flex items-center justify-between gap-2 px-2 py-1 rounded-md hover:bg-sa-chart-bg">
+                  <span className="text-xs font-mono text-sa-text-secondary">{perm}</span>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => toggle(perm, 'grant')}
+                      className={cn(
+                        'px-2 py-0.5 rounded text-[10px] font-medium border transition-colors',
+                        granted.has(perm)
+                          ? 'border-green-500/50 bg-green-500/10 text-green-500'
+                          : 'border-sa-border text-sa-text-muted hover:border-green-500/40',
+                      )}
+                    >
+                      Grant
+                    </button>
+                    <button
+                      onClick={() => toggle(perm, 'deny')}
+                      className={cn(
+                        'px-2 py-0.5 rounded text-[10px] font-medium border transition-colors',
+                        denied.has(perm)
+                          ? 'border-red-500/50 bg-red-500/10 text-red-400'
+                          : 'border-sa-border text-sa-text-muted hover:border-red-500/40',
+                      )}
+                    >
+                      Deny
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+      {save.isError && <p className="text-xs text-red-400">Failed to save permissions.</p>}
+      <div className="flex justify-end">
+        <Button disabled={!dirty || save.isPending} onClick={handleSave} className="gap-1.5">
+          <Save className="h-3.5 w-3.5" />
+          {save.isPending ? 'Saving…' : 'Save Overrides'}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function UserModuleAccessEditor({ tenantId, userId }: { tenantId: string; userId: string }) {
+  const catalog = useModuleCatalog();
+  const overrides = useUserModules(tenantId, userId);
+  const save = useSetUserModules();
+  const [allowed, setAllowed] = useState<Set<string>>(new Set());
+  const [denied, setDenied] = useState<Set<string>>(new Set());
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    if (overrides.data && !loaded) {
+      setAllowed(new Set(overrides.data.allowed));
+      setDenied(new Set(overrides.data.denied));
+      setLoaded(true);
+    }
+  }, [overrides.data, loaded]);
+
+  if (catalog.isLoading || overrides.isLoading) return <LoadingState label="Loading modules…" />;
+  if (catalog.isError || overrides.isError)
+    return <ErrorState message="Failed to load modules" onRetry={() => { catalog.refetch(); overrides.refetch(); }} />;
+
+  const entries = catalog.data ?? [];
+  const dirty = !loaded || (overrides.data !== undefined && (allowed.size !== overrides.data.allowed.length || denied.size !== overrides.data.denied.length));
+
+  const toggle = (moduleKey: string, type: 'allow' | 'deny') => {
+    const [setA, setB] = type === 'allow' ? [setAllowed, setDenied] : [setDenied, setAllowed];
+    setA((prev) => {
+      const next = new Set(prev);
+      if (next.has(moduleKey)) next.delete(moduleKey);
+      else next.add(moduleKey);
+      return next;
+    });
+    setB((prev) => {
+      const next = new Set(prev);
+      next.delete(moduleKey);
+      return next;
+    });
+  };
+
+  const handleSave = async () => {
+    await save.mutateAsync({
+      id: tenantId,
+      userId,
+      input: { allowed: Array.from(allowed), denied: Array.from(denied) },
+    });
+  };
+
+  return (
+    <div className="space-y-4">
+      <p className="text-xs text-sa-text-dim">
+        Deny overrides the organization module state (module hidden everywhere). Allow re-enables a module even if it is
+        disabled for the organization.
+      </p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        {entries.map((module) => (
+          <div key={module.key} className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg border border-sa-border">
+            <div>
+              <p className="text-sm font-medium text-sa-text capitalize">{module.label}</p>
+              <p className="text-xs text-sa-text-muted capitalize">{module.category}</p>
+            </div>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => toggle(module.key, 'allow')}
+                className={cn(
+                  'px-2 py-0.5 rounded text-[10px] font-medium border transition-colors',
+                  allowed.has(module.key)
+                    ? 'border-green-500/50 bg-green-500/10 text-green-500'
+                    : 'border-sa-border text-sa-text-muted hover:border-green-500/40',
+                )}
+              >
+                Allow
+              </button>
+              <button
+                onClick={() => toggle(module.key, 'deny')}
+                className={cn(
+                  'px-2 py-0.5 rounded text-[10px] font-medium border transition-colors',
+                  denied.has(module.key)
+                    ? 'border-red-500/50 bg-red-500/10 text-red-400'
+                    : 'border-sa-border text-sa-text-muted hover:border-red-500/40',
+                )}
+              >
+                Deny
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+      {save.isError && <p className="text-xs text-red-400">Failed to save module access.</p>}
+      <div className="flex justify-end">
+        <Button disabled={!dirty || save.isPending} onClick={handleSave} className="gap-1.5">
+          <Save className="h-3.5 w-3.5" />
+          {save.isPending ? 'Saving…' : 'Save Module Access'}
+        </Button>
+      </div>
     </div>
   );
 }
@@ -899,6 +1274,7 @@ function ModulesTab({
   };
   saving: boolean;
 }) {
+  const catalog = useModuleCatalog();
   const [localModules, setLocalModules] = useState<Record<string, boolean>>(modules);
 
   const handleToggle = (moduleKey: string, enabled: boolean) => {
@@ -909,10 +1285,18 @@ function ModulesTab({
     await onUpdate.mutateAsync({ id: tenantId, modules: { ...localModules } });
   };
 
+  if (catalog.isLoading) return <LoadingState label="Loading modules…" />;
+  if (catalog.isError) return <ErrorState message="Failed to load module catalog" onRetry={catalog.refetch} />;
+
+  const entries = catalog.data ?? [];
+  if (entries.length === 0) {
+    return <p className="text-sm text-sa-text-muted py-8 text-center">No modules available</p>;
+  }
+
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {CRM_MODULES.map((module) => {
+        {entries.map((module) => {
           const enabled = localModules[module.key] ?? false;
           return (
             <div
@@ -932,7 +1316,7 @@ function ModulesTab({
                   <div className="w-11 h-6 bg-sa-border peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-sa-accent/50 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-sa-border after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-sa-accent"></div>
                 </label>
               </div>
-              <p className="text-xs text-sa-text-muted">{module.category}</p>
+              <p className="text-xs text-sa-text-muted capitalize">{module.category}</p>
             </div>
           );
         })}

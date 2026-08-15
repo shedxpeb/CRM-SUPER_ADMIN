@@ -1,554 +1,194 @@
 'use client';
 
-import { useState } from 'react';
-import { ColumnDef } from '@tanstack/react-table';
-import { Plus, Ban, Undo2, Lock, Edit, Key, Shield } from 'lucide-react';
-import { PageHeader } from '@/components/sa/PageHeader';
-import { DataTable, Pagination } from '@/components/sa/DataTable';
+import { useMemo, useState } from 'react';
+import { Building2, Users as UsersIcon, Shield } from 'lucide-react';
+import { PageHeader, ErrorState } from '@/components/sa/PageHeader';
+import { Card, CardContent } from '@/components/ui/card';
+import { Pagination } from '@/components/sa/DataTable';
 import { BooleanBadge } from '@/components/sa/StatusBadge';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { useUsers, useRoles, useCreateUser, useUpdateUser, useForceLogoutUser, useUnlockUser, useSuspendUser, useResetPassword } from '@/lib/queries';
-import { useAuth } from '@/features/auth/AuthContext';
+import { Input } from '@/components/ui/input';
+import { useOrganizedUsers } from '@/lib/queries';
 import { RouteGuard } from '@/features/auth/RouteGuard';
 import { timeAgo } from '@/lib/format';
-import type { PlatformUser } from '@/lib/types';
+import type { OrganizedUser } from '@/lib/api/iam';
+
+const ROLE_OPTIONS = ['SUPER_ADMIN', 'OWNER', 'ADMIN', 'MANAGER', 'EMPLOYEE'];
 
 export default function UsersPage() {
-  const { user: currentUser } = useAuth();
   const [page, setPage] = useState(1);
-  const [search, setSearch] = useState('');
   const [searchInput, setSearchInput] = useState('');
-  const [createOpen, setCreateOpen] = useState(false);
-  const [editOpen, setEditOpen] = useState(false);
-  const [editingUser, setEditingUser] = useState<PlatformUser | null>(null);
-  const [resetUser, setResetUser] = useState<PlatformUser | null>(null);
+  const [search, setSearch] = useState('');
+  const [organizationId, setOrganizationId] = useState('');
+  const [role, setRole] = useState('');
+  const [status, setStatus] = useState('');
 
-  const { data, isLoading, isError, refetch } = useUsers({ page, pageSize: 20, q: search || undefined });
-  const roles = useRoles({ page: 1, pageSize: 100 });
-  const createUser = useCreateUser();
-  const updateUser = useUpdateUser();
-  const forceLogoutUser = useForceLogoutUser();
-  const unlockUser = useUnlockUser();
-  const suspendUser = useSuspendUser();
-  const resetPassword = useResetPassword();
+  const { data, isLoading, isError, refetch } = useOrganizedUsers({
+    page,
+    pageSize: 50,
+    q: search || undefined,
+    organizationId: organizationId || undefined,
+    role: role || undefined,
+    status: (status as 'active' | 'inactive' | undefined) || undefined,
+  });
 
-  const handleEdit = (user: PlatformUser) => {
-    setEditingUser(user);
-    setEditOpen(true);
-  };
+  const organizations = data?.meta?.organizations ?? [];
+  const total = data?.meta?.total ?? 0;
 
-  const handleUnlock = async (userId: string) => {
-    await unlockUser.mutateAsync(userId);
-  };
+  // Group users by organization (organization-centric view)
+  const grouped = useMemo(() => {
+    const map = new Map<string, { orgName: string; users: OrganizedUser[] }>();
+    for (const u of data?.items ?? []) {
+      const key = u.organizationId ?? 'unassigned';
+      const entry = map.get(key) ?? { orgName: u.organizationName || 'Unassigned', users: [] };
+      entry.users.push(u);
+      map.set(key, entry);
+    }
+    return [...map.entries()].sort((a, b) => a[1].orgName.localeCompare(b[1].orgName));
+  }, [data?.items]);
 
-  const handleForceLogout = async (userId: string) => {
-    await forceLogoutUser.mutateAsync(userId);
-  };
-
-  const handleResetPassword = async (user: PlatformUser) => {
-    setResetUser(user);
-  };
-
-  const handleDisable = async (user: PlatformUser) => {
-    await suspendUser.mutateAsync({ id: user.id, reason: 'Disabled from console' });
-  };
-
-  const columns: ColumnDef<PlatformUser, unknown>[] = [
-    {
-      accessorKey: 'name',
-      header: 'Name',
-      cell: ({ row }) => (
-        <div className="min-w-0">
-          <p className="text-sm font-medium text-sa-text">{row.original.name ?? row.original.email}</p>
-          <p className="text-xs text-sa-text-dim truncate">{row.original.email}</p>
-        </div>
-      ),
-    },
-    {
-      accessorKey: 'email',
-      header: 'Email',
-      cell: ({ row }) => <span className="text-xs text-sa-text-muted">{row.original.email}</span>,
-    },
-    {
-      accessorKey: 'roles',
-      header: 'Role',
-      cell: ({ row }) => (
-        <div className="flex flex-wrap gap-1">
-          {(row.original.roles ?? []).map((r) => (
-            <Badge key={r.id} variant="secondary" className="text-[10px] gap-1">
-              <Shield className="h-2.5 w-2.5" />
-              {r.name}
-            </Badge>
-          ))}
-          {(row.original.roles ?? []).length === 0 && (
-            <Badge variant="outline" className="text-[10px]">No roles</Badge>
-          )}
-        </div>
-      ),
-    },
-    {
-      accessorKey: 'isActive',
-      header: 'Status',
-      cell: ({ row }) =>
-        row.original.isLocked ? (
-          <Badge variant="destructive" className="text-[10px] flex items-center gap-1">
-            <Lock className="h-2.5 w-2.5" />
-            Locked
-          </Badge>
-        ) : (
-          <BooleanBadge value={row.original.isActive} trueLabel="Active" falseLabel="Inactive" />
-        ),
-    },
-    {
-      accessorKey: 'lastLoginAt',
-      header: 'Last Login',
-      cell: ({ row }) => <span className="text-xs text-sa-text-muted">{row.original.lastLoginAt ? timeAgo(row.original.lastLoginAt) : 'Never'}</span>,
-    },
-    {
-      accessorKey: 'activeSessions',
-      header: 'Sessions',
-      cell: ({ row }) => (
-        <Badge variant={(row.original.activeSessions ?? 0) > 0 ? 'secondary' : 'outline'} className="text-[10px]">
-          {row.original.activeSessions ?? 0} active
-        </Badge>
-      ),
-    },
-    {
-      accessorKey: 'createdAt',
-      header: 'Created',
-      cell: ({ row }) => <span className="text-xs text-sa-text-muted">{timeAgo(row.original.createdAt)}</span>,
-    },
-    {
-      id: 'actions',
-      header: 'Actions',
-      cell: ({ row }) =>
-        row.original.id === currentUser?.id ? null : (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="h-7 w-7">
-                <span className="sr-only">Actions</span>
-                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" /></svg>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="min-w-[160px]">
-              <DropdownMenuItem
-                className="flex items-center gap-2"
-                onClick={() => handleEdit(row.original)}
-              >
-                <Edit className="h-3.5 w-3.5" />
-                Edit
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                className="flex items-center gap-2"
-                onClick={() => handleForceLogout(row.original.id)}
-              >
-                <Lock className="h-3.5 w-3.5" />
-                Force Logout
-              </DropdownMenuItem>
-              {row.original.isLocked && (
-                <DropdownMenuItem
-                  className="flex items-center gap-2 text-green-400"
-                  onClick={() => handleUnlock(row.original.id)}
-                >
-                  <Undo2 className="h-3.5 w-3.5" />
-                  Unlock
-                </DropdownMenuItem>
-              )}
-              <DropdownMenuItem
-                className="flex items-center gap-2"
-                onClick={() => handleResetPassword(row.original)}
-              >
-                <Key className="h-3.5 w-3.5" />
-                Reset Password
-              </DropdownMenuItem>
-              {row.original.isActive ? (
-                <DropdownMenuItem
-                  className="flex items-center gap-2 text-red-400"
-                  onClick={() => handleDisable(row.original)}
-                >
-                  <Ban className="h-3.5 w-3.5" />
-                  Disable
-                </DropdownMenuItem>
-              ) : (
-                <DropdownMenuItem
-                  className="flex items-center gap-2 text-green-400"
-                  onClick={async () => {
-                    await updateUser.mutateAsync({ id: row.original.id, input: { isActive: true } });
-                  }}
-                >
-                  <Undo2 className="h-3.5 w-3.5" />
-                  Enable
-                </DropdownMenuItem>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        ),
-    },
-  ];
+  if (isError) return <ErrorState message="Failed to load users" onRetry={refetch} />;
 
   return (
     <RouteGuard requiredPermission="users:read">
       <div>
         <PageHeader
           title="Users"
-          subtitle="Platform operators and their role assignments"
+          subtitle="All CRM users grouped by organization — real database records only"
           actions={
-          <Button className="gap-2" onClick={() => setCreateOpen(true)}>
-            <Plus className="h-4 w-4" />
-            New User
-          </Button>
-        }
-      />
-
-      <div className="max-w-md mb-4">
-        <Input
-          placeholder="Search by email or name…"
-          value={searchInput}
-          onChange={(e) => setSearchInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              setPage(1);
-              setSearch(searchInput);
-            }
-          }}
+            <Badge variant="secondary" className="gap-1.5">
+              <UsersIcon className="h-3.5 w-3.5" />
+              {total} users · {organizations.length} organizations
+            </Badge>
+          }
         />
-      </div>
 
-      <DataTable
-        columns={columns}
-        data={data?.data ?? []}
-        isLoading={isLoading}
-        isError={isError}
-        onRetry={refetch}
-        emptyMessage="No users found"
-      />
-      <Pagination page={page} pageSize={20} total={data?.meta?.total ?? 0} onPageChange={setPage} />
-
-      {createOpen && (
-        <UserCreateDialog
-          roles={roles.data?.data ?? []}
-          onClose={() => setCreateOpen(false)}
-          onSubmit={async (input) => {
-            await createUser.mutateAsync(input);
-            setCreateOpen(false);
-          }}
-          loading={createUser.isPending}
-        />
-      )}
-
-      {editOpen && editingUser && (
-        <UserEditDialog
-          user={editingUser}
-          roles={roles.data?.data ?? []}
-          onClose={() => { setEditOpen(false); setEditingUser(null); }}
-          onSubmit={async (input) => {
-            await updateUser.mutateAsync({ id: editingUser.id, input });
-            setEditOpen(false);
-            setEditingUser(null);
-          }}
-          loading={updateUser.isPending}
-        />
-      )}
-
-      {resetUser && (
-        <ResetPasswordDialog
-          user={resetUser}
-          loading={resetPassword.isPending}
-          onClose={() => setResetUser(null)}
-          onSubmit={async (newPassword) => {
-            await resetPassword.mutateAsync({ id: resetUser.id, newPassword });
-            setResetUser(null);
-          }}
-        />
-      )}
-    </div>
-    </RouteGuard>
-);
-}
-
-function UserEditDialog({
-  user,
-  roles,
-  onClose,
-  onSubmit,
-  loading,
-}: {
-  user: PlatformUser;
-  roles: { id: string; name: string }[];
-  onClose: () => void;
-  onSubmit: (input: {
-    name?: string;
-    roleIds?: string[];
-    isActive?: boolean;
-  }) => Promise<void>;
-  loading: boolean;
-}) {
-  const [name, setName] = useState(user.name ?? '');
-  const [roleIds, setRoleIds] = useState<string[]>(user.roles?.map(r => r.id) ?? []);
-  const [isActive, setIsActive] = useState(user.isActive);
-  const [error, setError] = useState('');
-
-  const toggleRole = (id: string) => {
-    setRoleIds((prev) => (prev.includes(id) ? prev.filter((r) => r !== id) : [...prev, id]));
-  };
-
-  return (
-    <Dialog open onOpenChange={onClose}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Edit User: {user.email}</DialogTitle>
-        </DialogHeader>
-        <form
-          className="space-y-4 pt-2"
-          onSubmit={async (e) => {
-            e.preventDefault();
-            setError('');
-            try {
-              await onSubmit({
-                name: name || undefined,
-                roleIds: roleIds.length ? roleIds : undefined,
-                isActive,
-              });
-            } catch (err) {
-              setError(err instanceof Error ? err.message : 'Failed to update user');
-            }
-          }}
-        >
-          {error && <p className="text-sm text-red-400">{error}</p>}
+        {/* Filters: Organization, Role, Status + search */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
           <div>
-            <label className="block text-xs font-medium mb-1.5 text-sa-text-muted">Name</label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} />
-          </div>
-          <div>
-            <label className="block text-xs font-medium mb-1.5 text-sa-text-muted">Status</label>
+            <label className="block text-[10px] font-semibold uppercase tracking-wider text-sa-text-dim mb-1">Organization</label>
             <select
-              value={isActive.toString()}
-              onChange={(e) => setIsActive(e.target.value === 'true')}
+              value={organizationId}
+              onChange={(e) => { setPage(1); setOrganizationId(e.target.value); }}
               className="w-full bg-sa-input border-sa-border text-sa-text h-9 text-sm rounded-lg px-3"
             >
-              <option value="true">Active</option>
-              <option value="false">Inactive</option>
+              <option value="">All organizations</option>
+              {organizations.map((o) => (
+                <option key={o.id} value={o.id}>{o.name}</option>
+              ))}
             </select>
           </div>
           <div>
-            <label className="block text-xs font-medium mb-1.5 text-sa-text-muted">Roles</label>
-            <div className="flex flex-wrap gap-2">
-              {roles.map((r) => (
-                <button
-                  key={r.id}
-                  type="button"
-                  onClick={() => toggleRole(r.id)}
-                  className={[
-                    'px-2.5 py-1 rounded-md text-xs font-medium border transition-colors',
-                    roleIds.includes(r.id)
-                      ? 'border-sa-accent text-sa-accent bg-red-500/10'
-                      : 'border-sa-border text-sa-text-muted hover:text-sa-text',
-                  ].join(' ')}
-                >
-                  {r.name}
-                </button>
+            <label className="block text-[10px] font-semibold uppercase tracking-wider text-sa-text-dim mb-1">Role</label>
+            <select
+              value={role}
+              onChange={(e) => { setPage(1); setRole(e.target.value); }}
+              className="w-full bg-sa-input border-sa-border text-sa-text h-9 text-sm rounded-lg px-3"
+            >
+              <option value="">All roles</option>
+              {ROLE_OPTIONS.map((r) => (
+                <option key={r} value={r}>{r}</option>
               ))}
-              {roles.length === 0 && <p className="text-xs text-sa-text-dim">No roles available</p>}
-            </div>
-          </div>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="ghost" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={loading}>
-              {loading ? 'Saving…' : 'Save Changes'}
-            </Button>
-          </div>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function UserCreateDialog({
-  roles,
-  onClose,
-  onSubmit,
-  loading,
-}: {
-  roles: { id: string; name: string }[];
-  onClose: () => void;
-  onSubmit: (input: {
-    email: string;
-    password: string;
-    name: string;
-    roleIds?: string[];
-  }) => Promise<void>;
-  loading: boolean;
-}) {
-  const [email, setEmail] = useState('');
-  const [name, setName] = useState('');
-  const [password, setPassword] = useState('');
-  const [roleIds, setRoleIds] = useState<string[]>([]);
-  const [error, setError] = useState('');
-
-  const toggleRole = (id: string) => {
-    setRoleIds((prev) => (prev.includes(id) ? prev.filter((r) => r !== id) : [...prev, id]));
-  };
-
-  return (
-    <Dialog open onOpenChange={onClose}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>New Platform User</DialogTitle>
-        </DialogHeader>
-        <form
-          className="space-y-4 pt-2"
-          onSubmit={async (e) => {
-            e.preventDefault();
-            setError('');
-            try {
-              await onSubmit({
-                email,
-                password,
-                name: name || email.split('@')[0],
-                roleIds: roleIds.length ? roleIds : undefined,
-              });
-            } catch (err) {
-              setError(err instanceof Error ? err.message : 'Failed to create user');
-            }
-          }}
-        >
-          {error && <p className="text-sm text-red-400">{error}</p>}
-          <div>
-            <label className="block text-xs font-medium mb-1.5 text-sa-text-muted">Email</label>
-            <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+            </select>
           </div>
           <div>
-            <label className="block text-xs font-medium mb-1.5 text-sa-text-muted">Name</label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} required />
+            <label className="block text-[10px] font-semibold uppercase tracking-wider text-sa-text-dim mb-1">Status</label>
+            <select
+              value={status}
+              onChange={(e) => { setPage(1); setStatus(e.target.value); }}
+              className="w-full bg-sa-input border-sa-border text-sa-text h-9 text-sm rounded-lg px-3"
+            >
+              <option value="">All statuses</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+            </select>
           </div>
           <div>
-            <label className="block text-xs font-medium mb-1.5 text-sa-text-muted">Password</label>
+            <label className="block text-[10px] font-semibold uppercase tracking-wider text-sa-text-dim mb-1">Search</label>
             <Input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              minLength={8}
+              placeholder="Name or email…"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  setPage(1);
+                  setSearch(searchInput);
+                }
+              }}
             />
           </div>
-          <div>
-            <label className="block text-xs font-medium mb-1.5 text-sa-text-muted">Roles</label>
-            <div className="flex flex-wrap gap-2">
-              {roles.map((r) => (
-                <button
-                  key={r.id}
-                  type="button"
-                  onClick={() => toggleRole(r.id)}
-                  className={[
-                    'px-2.5 py-1 rounded-md text-xs font-medium border transition-colors',
-                    roleIds.includes(r.id)
-                      ? 'border-sa-accent text-sa-accent bg-red-500/10'
-                      : 'border-sa-border text-sa-text-muted hover:text-sa-text',
-                  ].join(' ')}
-                >
-                  {r.name}
-                </button>
-              ))}
-              {roles.length === 0 && <p className="text-xs text-sa-text-dim">No roles available</p>}
-            </div>
-          </div>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="ghost" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={loading}>
-              {loading ? 'Creating…' : 'Create User'}
-            </Button>
-          </div>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
+        </div>
 
-function ResetPasswordDialog({
-  user,
-  loading,
-  onClose,
-  onSubmit,
-}: {
-  user: PlatformUser;
-  loading: boolean;
-  onClose: () => void;
-  onSubmit: (newPassword: string) => Promise<void>;
-}) {
-  const [password, setPassword] = useState('');
-  const [confirm, setConfirm] = useState('');
-  const [error, setError] = useState('');
+        {grouped.length === 0 ? (
+          <Card className="bg-sa-card border-sa-border">
+            <CardContent className="p-8 text-center">
+              <p className="text-sm text-sa-text-muted">No users match the current filters</p>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-4">
+            {grouped.map(([orgKey, group]) => (
+              <Card key={orgKey} className="bg-sa-card border-sa-border overflow-hidden">
+                <CardContent className="p-0">
+                  <div className="flex items-center gap-2 px-4 py-2.5 border-b border-sa-border bg-sa-chart-bg">
+                    <Building2 className="h-3.5 w-3.5 text-sa-accent" />
+                    <span className="text-xs font-semibold text-sa-text">{group.orgName}</span>
+                    <span className="text-[10px] text-sa-text-dim">({group.users.length} user{group.users.length === 1 ? '' : 's'})</span>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-sa-border">
+                          <th className="text-left px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-sa-text-dim">Name</th>
+                          <th className="text-left px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-sa-text-dim">Email</th>
+                          <th className="text-left px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-sa-text-dim">Tenant</th>
+                          <th className="text-left px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-sa-text-dim">Role</th>
+                          <th className="text-left px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-sa-text-dim">Status</th>
+                          <th className="text-left px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-sa-text-dim">Last Login</th>
+                          <th className="text-left px-4 py-2 text-[10px] font-semibold uppercase tracking-wider text-sa-text-dim">Created</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {group.users.map((u) => (
+                          <tr key={u.id} className="border-b border-sa-border last:border-0 hover:bg-sa-row-hover">
+                            <td className="px-4 py-2.5">
+                              <div className="min-w-0">
+                                <p className="text-sm font-medium text-sa-text">{u.name ?? u.email}</p>
+                                <p className="text-xs text-sa-text-dim">{u.designation ?? u.department ?? ''}</p>
+                              </div>
+                            </td>
+                            <td className="px-4 py-2.5 text-xs text-sa-text-muted">{u.email}</td>
+                            <td className="px-4 py-2.5 text-xs text-sa-text-muted">{u.tenantId ? group.orgName : '—'}</td>
+                            <td className="px-4 py-2.5">
+                              <Badge variant="secondary" className="text-[10px] gap-1">
+                                <Shield className="h-2.5 w-2.5" />
+                                {u.role}
+                              </Badge>
+                            </td>
+                            <td className="px-4 py-2.5">
+                              {u.isLocked ? (
+                                <Badge variant="destructive" className="text-[10px]">Locked</Badge>
+                              ) : (
+                                <BooleanBadge value={u.isActive} trueLabel="Active" falseLabel="Inactive" />
+                              )}
+                            </td>
+                            <td className="px-4 py-2.5 text-xs text-sa-text-muted">{u.lastLogin ? timeAgo(u.lastLogin) : 'Never'}</td>
+                            <td className="px-4 py-2.5 text-xs text-sa-text-muted">{timeAgo(u.createdAt)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
 
-  return (
-    <Dialog open onOpenChange={onClose}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Reset password · {user.email}</DialogTitle>
-        </DialogHeader>
-        <form
-          className="space-y-4 pt-2"
-          onSubmit={async (e) => {
-            e.preventDefault();
-            setError('');
-            if (password !== confirm) {
-              setError('Passwords do not match');
-              return;
-            }
-            try {
-              await onSubmit(password);
-            } catch (err) {
-              setError(err instanceof Error ? err.message : 'Failed to reset password');
-            }
-          }}
-        >
-          <p className="text-sm text-sa-text-muted">
-            The user&apos;s active sessions will be revoked and they&apos;ll be required to change
-            the password on their next login.
-          </p>
-          {error && <p className="text-sm text-red-400">{error}</p>}
-          <div>
-            <label className="block text-xs font-medium mb-1.5 text-sa-text-muted">New password</label>
-            <Input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              minLength={8}
-              placeholder="Minimum 8 chars, incl. upper/lower/digit/special"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium mb-1.5 text-sa-text-muted">Confirm password</label>
-            <Input
-              type="password"
-              value={confirm}
-              onChange={(e) => setConfirm(e.target.value)}
-              required
-            />
-          </div>
-          <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="ghost" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={loading}>
-              {loading ? 'Resetting…' : 'Reset Password'}
-            </Button>
-          </div>
-        </form>
-      </DialogContent>
-    </Dialog>
+        <Pagination page={page} pageSize={50} total={total} onPageChange={setPage} />
+
+        {isLoading && <p className="text-sm text-sa-text-muted py-4 text-center">Loading users…</p>}
+      </div>
+    </RouteGuard>
   );
 }

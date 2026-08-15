@@ -2,10 +2,12 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { Prisma, TenantStatus } from '@prisma/client';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../database/prisma.service';
 import { CrmPrismaService } from '../../database/crm-prisma.service';
 import { AuditService } from '../auth/services/audit.service';
@@ -15,6 +17,14 @@ import { ListTenantsDto } from './dto/list-tenants.dto';
 import { SuspendTenantDto } from './dto/tenant-actions.dto';
 import { TenantResponseDto } from './interfaces/tenant-response.interface';
 import { resolvePage, buildPageMeta } from '../../shared/helpers/pagination.helper';
+import { normalizeModuleKey } from '../../common/utils/module-key.util';
+import { MODULE_CATALOG_KEYS } from '../../common/constants/module-catalog.constants';
+import {
+  CRM_DEFAULT_MODULES,
+  CRM_SYSTEM_ROLES,
+  CRM_PERMISSION_CATALOG,
+} from './crm-provisioning.constants';
+import { MailService } from '../platform/mail.service';
 
 const TENANT_SELECT = {
   id: true,
@@ -41,10 +51,14 @@ const TENANT_SELECT = {
 
 @Injectable()
 export class TenantsService {
+  private readonly logger = new Logger(TenantsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly crmPrisma: CrmPrismaService,
     private readonly auditService: AuditService,
+    private readonly mailService: MailService,
+    private readonly config: ConfigService,
   ) {}
 
   async create(dto: CreateTenantDto, actor: { id: string; email: string }) {
@@ -57,20 +71,7 @@ export class TenantsService {
       if (clash) throw new ConflictException('A tenant with this domain already exists');
     }
 
-    const defaultModules = [
-      'dashboard',
-      'leads',
-      'customers',
-      'projects',
-      'vendors',
-      'inventory',
-      'warehouse',
-      'purchases',
-      'tracking',
-      'reports',
-      'users',
-      'roles',
-    ];
+    const defaultModules = [...MODULE_CATALOG_KEYS];
 
     // Step 1: Create Platform DB Tenant record with SYNCING state
     let tenant;
@@ -92,15 +93,128 @@ export class TenantsService {
         },
         select: TENANT_SELECT,
       });
-    } catch (error) {
+    } catch {
       throw new BadRequestException('Failed to create tenant in platform database');
     }
 
-    // Step 2: Mark tenant as SYNCED (CRM sync is not implemented in this version)
+    // Step 2: Provision the CRM Organization + system roles + default modules,
+    // then link the tenant. On CRM failure the platform tenant is marked FAILED
+    // with the error recorded in syncError (retryable, honest sync state).
+    let crmOrganizationId: string | null = null;
+    let adminUserEmail: string | null = null;
+    let adminPasswordSet = false;
+    try {
+      const provisioned = await this.crmPrisma.$transaction(async (crmTx) => {
+        const crmOrg = await crmTx.organization.create({
+          data: {
+            name: dto.name.trim(),
+            slug,
+            email: dto.email,
+            status: 'Active',
+            maxUsers: dto.maxUsers ?? 25,
+            maxStorageGb: dto.maxStorageGB ?? 10,
+            roleHierarchyEnabled: true,
+            maxRoleDepth: 5,
+            // The full permission catalog becomes the tenant's delegation pool,
+            // so the tenant admin can grant any CRM permission to their roles.
+            permissionPool: JSON.stringify(Object.values(CRM_PERMISSION_CATALOG).flat()),
+          },
+        });
+
+        const createdRoles: { id: string; code: string | null }[] = [];
+        for (const role of CRM_SYSTEM_ROLES) {
+          const created = await crmTx.role.create({
+            data: {
+              organizationId: crmOrg.id,
+              name: role.name,
+              code: role.code,
+              permissions: [...role.permissions],
+              isSystem: true,
+            },
+            select: { id: true, code: true },
+          });
+          createdRoles.push(created);
+        }
+
+        // Enable default modules (canonical singular keys so the CRM guards
+        // resolve them; platform keeps plural keys in modulesEnabled).
+        const moduleKeys = Array.from(
+          new Set([...defaultModules.map((m) => normalizeModuleKey(m)), ...CRM_DEFAULT_MODULES]),
+        );
+        for (const moduleKey of moduleKeys) {
+          await crmTx.organizationModule.create({
+            data: {
+              organizationId: crmOrg.id,
+              moduleKey,
+              enabled: true,
+              enabledAt: new Date(),
+            },
+          });
+        } // Step 2b: Create the tenant admin user.
+        // If the platform operator supplied an initialPassword it is set directly;
+        // otherwise the user is created without a usable password and sets their own
+        // through the CRM OTP (forgot-password) flow. No password is ever
+        // auto-generated and returned by this API.
+        const existingUser = await crmTx.user.findFirst({
+          where: { email: dto.email.toLowerCase(), isDeleted: false },
+        });
+        if (existingUser) {
+          throw new ConflictException(`A user with email ${dto.email} already exists in the CRM`);
+        }
+        const adminUser = await crmTx.user.create({
+          data: {
+            email: dto.email.toLowerCase(),
+            name: dto.name.trim(),
+            role: 'ADMIN',
+            organizationId: crmOrg.id,
+            password: dto.initialPassword
+              ? await bcrypt.hash(dto.initialPassword, 10)
+              : await bcrypt.hash(crypto.randomUUID(), 10),
+            isActive: true,
+            isVerified: true,
+            mustChangePassword: false,
+            version: 1,
+          },
+        });
+
+        // Link the admin user to the system ADMIN role so RBAC resolves their
+        // permissions (the CRM resolves effective permissions via UserRole).
+        const adminRole = createdRoles.find((r) => r.code === 'ADMIN');
+        if (adminRole) {
+          await crmTx.userRole.create({
+            data: {
+              userId: adminUser.id,
+              roleId: adminRole.id,
+              organizationId: crmOrg.id,
+              assignedAt: new Date(),
+            },
+          });
+        }
+
+        return { crmOrgId: crmOrg.id, passwordSet: !!dto.initialPassword };
+      });
+      crmOrganizationId = provisioned.crmOrgId;
+      adminPasswordSet = provisioned.passwordSet;
+      adminUserEmail = dto.email.toLowerCase();
+    } catch (error) {
+      await this.prisma.tenant.update({
+        where: { id: tenant.id },
+        data: {
+          syncState: 'FAILED',
+          syncError:
+            error instanceof Error ? error.message : 'Failed to provision CRM organization',
+          version: { increment: 1 },
+        },
+      });
+      throw new BadRequestException('Failed to provision CRM organization for tenant');
+    }
+
+    // Step 3: Link tenant to the provisioned CRM organization and mark SYNCED
     try {
       tenant = await this.prisma.tenant.update({
         where: { id: tenant.id },
         data: {
+          crmOrganizationId,
           syncState: 'SYNCED',
           lastSyncedAt: new Date(),
           syncVersion: { increment: 1 },
@@ -110,7 +224,15 @@ export class TenantsService {
         select: TENANT_SELECT,
       });
     } catch (error) {
-      throw new BadRequestException('Failed to update tenant sync state');
+      await this.prisma.tenant.update({
+        where: { id: tenant.id },
+        data: {
+          syncState: 'FAILED',
+          syncError:
+            error instanceof Error ? error.message : 'Failed to link tenant to CRM organization',
+        },
+      });
+      throw new BadRequestException('Failed to link tenant to CRM organization');
     }
 
     // Step 4: Create audit log entry
@@ -121,10 +243,39 @@ export class TenantsService {
       targetType: 'Tenant',
       targetId: tenant.id,
       targetName: tenant.name,
-      metadata: { slug: tenant.slug, status: tenant.status, crmOrganizationId: tenant.crmOrganizationId },
+      metadata: {
+        slug: tenant.slug,
+        status: tenant.status,
+        crmOrganizationId: tenant.crmOrganizationId,
+        adminUserEmail,
+        adminPasswordSet,
+      },
     });
 
-    return this.mapTenant(tenant);
+    // Step 5: Deliver onboarding instructions to the tenant admin (best-effort email).
+    if (adminUserEmail) {
+      const crmBaseUrl =
+        this.config?.get<string>('crm.baseUrl') ||
+        process.env.CRM_BASE_URL ||
+        'https://app.pebcrm.com';
+      await this.mailService.sendTenantAdminWelcome({
+        to: adminUserEmail,
+        tenantName: tenant.name,
+        passwordSetByOperator: adminPasswordSet,
+        crmUrl: crmBaseUrl,
+      });
+    }
+
+    return {
+      ...this.mapTenant(tenant),
+      adminUser: adminUserEmail
+        ? {
+            email: adminUserEmail,
+            role: 'ADMIN',
+            passwordSet: adminPasswordSet,
+          }
+        : null,
+    };
   }
 
   async findAll(dto: ListTenantsDto) {
@@ -148,10 +299,14 @@ export class TenantsService {
       this.prisma.tenant.count({ where }),
     ]);
 
-    const counts = await this.resolveUserCounts(items.map((t) => t.crmOrganizationId).filter(Boolean) as string[]);
+    const counts = await this.resolveUserCounts(
+      items.map((t) => t.crmOrganizationId).filter(Boolean) as string[],
+    );
 
     return {
-      items: items.map((t) => this.mapTenant(t, t.crmOrganizationId ? counts.get(t.crmOrganizationId) ?? 0 : 0)),
+      items: items.map((t) =>
+        this.mapTenant(t, t.crmOrganizationId ? (counts.get(t.crmOrganizationId) ?? 0) : 0),
+      ),
       meta: buildPageMeta(page, take, total, dto.sort),
     };
   }
@@ -167,7 +322,10 @@ export class TenantsService {
       ? await this.resolveUserCounts([tenant.crmOrganizationId])
       : new Map<string, number>();
 
-    return this.mapTenant(tenant, tenant.crmOrganizationId ? count.get(tenant.crmOrganizationId) ?? 0 : 0);
+    return this.mapTenant(
+      tenant,
+      tenant.crmOrganizationId ? (count.get(tenant.crmOrganizationId) ?? 0) : 0,
+    );
   }
 
   private async resolveUserCounts(organizationIds: string[]): Promise<Map<string, number>> {
@@ -348,7 +506,7 @@ export class TenantsService {
             data: { isRevoked: true, revokedAt: new Date() },
           });
         });
-      } catch (error) {
+      } catch {
         // Compensating transaction: Revert tenant status if CRM update fails
         await this.prisma.tenant.update({
           where: { id },
@@ -392,10 +550,10 @@ export class TenantsService {
     try {
       updated = await this.prisma.tenant.update({
         where: { id, version: expectedVersion },
-        data: { 
-          status: TenantStatus.ACTIVE, 
+        data: {
+          status: TenantStatus.ACTIVE,
           version: { increment: 1 },
-          updatedById: actor.id 
+          updatedById: actor.id,
         },
         select: TENANT_SELECT,
       });
@@ -426,7 +584,7 @@ export class TenantsService {
             data: { isActive: true },
           });
         });
-      } catch (error) {
+      } catch {
         // Compensating transaction: Revert tenant status if CRM update fails
         await this.prisma.tenant.update({
           where: { id },

@@ -12,6 +12,8 @@ import {
   ResetTenantUserPasswordDto,
   SetTenantRolePermissionsDto,
   SetTenantUserActiveDto,
+  SetTenantUserModulesDto,
+  SetTenantUserPermissionsDto,
   UpdateTenantRoleDto,
   UpdateTenantUserDto,
 } from './dto/tenant-crm.dto';
@@ -21,20 +23,13 @@ import {
 export class TenantOpsController {
   constructor(private readonly tenantOpsService: TenantOpsService) {}
 
-  // ── Activity / Impersonations / Modules ─────────────────────────────────────
+  // ── Activity / Modules ──────────────────────────────────────────────────────
 
   @Get('activity')
   @RequirePermissions('audit:read')
   @ApiOperation({ summary: 'Get the activity timeline (audit log) for a tenant' })
   getActivity(@Param('id') id: string, @Query() query: PaginationDto) {
     return this.tenantOpsService.getActivity(id, query);
-  }
-
-  @Get('impersonations')
-  @RequirePermissions('security:read')
-  @ApiOperation({ summary: 'Get impersonation logs for a tenant' })
-  getImpersonations(@Param('id') id: string, @Query() query: PaginationDto) {
-    return this.tenantOpsService.getImpersonations(id, query);
   }
 
   @Get('modules')
@@ -141,6 +136,13 @@ export class TenantOpsController {
     });
   }
 
+  @Get('users/:userId/roles')
+  @RequirePermissions('users:read')
+  @ApiOperation({ summary: 'Get the roles assigned to a CRM user' })
+  getUserRoles(@Param('id') id: string, @Param('userId') userId: string) {
+    return this.tenantOpsService.getTenantUserRoles(id, userId);
+  }
+
   @Post('users/:userId/roles')
   @RequirePermissions('users:update')
   @ApiOperation({ summary: 'Assign a role to a CRM user' })
@@ -165,6 +167,50 @@ export class TenantOpsController {
     @CurrentUser() actor: CurrentUser,
   ) {
     return this.tenantOpsService.removeTenantUserRole(id, userId, {
+      id: actor.id,
+      email: actor.email,
+    });
+  }
+
+  @Get('users/:userId/permissions')
+  @RequirePermissions('users:read')
+  @ApiOperation({ summary: "Get a CRM user's direct permission overrides (grant/deny)" })
+  getUserPermissions(@Param('id') id: string, @Param('userId') userId: string) {
+    return this.tenantOpsService.getTenantUserPermissions(id, userId);
+  }
+
+  @Put('users/:userId/permissions')
+  @RequirePermissions('users:update')
+  @ApiOperation({ summary: "Set a CRM user's direct permission overrides (granted/denied list)" })
+  setUserPermissions(
+    @Param('id') id: string,
+    @Param('userId') userId: string,
+    @Body() dto: SetTenantUserPermissionsDto,
+    @CurrentUser() actor: CurrentUser,
+  ) {
+    return this.tenantOpsService.setTenantUserPermissions(id, userId, dto, {
+      id: actor.id,
+      email: actor.email,
+    });
+  }
+
+  @Get('users/:userId/modules')
+  @RequirePermissions('users:read')
+  @ApiOperation({ summary: "Get a CRM user's module access overrides" })
+  getUserModules(@Param('id') id: string, @Param('userId') userId: string) {
+    return this.tenantOpsService.getTenantUserModules(id, userId);
+  }
+
+  @Put('users/:userId/modules')
+  @RequirePermissions('users:update')
+  @ApiOperation({ summary: "Set a CRM user's module access overrides (allowed/denied list)" })
+  setUserModules(
+    @Param('id') id: string,
+    @Param('userId') userId: string,
+    @Body() dto: SetTenantUserModulesDto,
+    @CurrentUser() actor: CurrentUser,
+  ) {
+    return this.tenantOpsService.setTenantUserModules(id, userId, dto, {
       id: actor.id,
       email: actor.email,
     });
@@ -263,6 +309,13 @@ export class TenantOpsController {
   @ApiOperation({ summary: 'Get the permission matrix for a tenant (CRM source)' })
   getPermissions(@Param('id') id: string) {
     return this.tenantOpsService.getTenantPermissions(id);
+  }
+
+  @Get('permissions/catalog')
+  @RequirePermissions('permissions:read')
+  @ApiOperation({ summary: 'Get the full CRM permission catalog grouped by module' })
+  getPermissionCatalog() {
+    return this.tenantOpsService.getPermissionCatalog();
   }
 
   @Get('login-history')

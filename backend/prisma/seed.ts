@@ -11,7 +11,6 @@ const PERMISSION_CATALOG: { key: string; module: string; label: string; category
   { key: 'organization:suspend', module: 'tenants', label: 'Suspend tenants', category: 'tenants' },
   { key: 'organization:restore', module: 'tenants', label: 'Restore tenants', category: 'tenants' },
   { key: 'organization:delete', module: 'tenants', label: 'Delete tenants', category: 'tenants' },
-  { key: 'organization:impersonate', module: 'tenants', label: 'Impersonate tenants', category: 'tenants' },
   // Users & RBAC
   { key: 'users:read', module: 'users', label: 'View platform users', category: 'rbac' },
   { key: 'users:manage', module: 'users', label: 'Manage platform users', category: 'rbac' },
@@ -38,18 +37,24 @@ const PERMISSION_CATALOG: { key: string; module: string; label: string; category
 
 const ROLE_PERMISSIONS: Record<string, string[]> = {
   SUPER_ADMIN: ['*', ...PERMISSION_CATALOG.map((p) => p.key)],
-  PLATFORM_OPERATOR: [
+  OWNER: [
     'organization:read', 'organization:create', 'organization:update', 'organization:suspend', 'organization:restore',
-    'users:read', 'roles:read', 'permissions:read', 'modules:manage',
+    'users:read', 'users:manage', 'roles:read', 'roles:manage', 'permissions:read', 'permissions:manage', 'modules:manage',
     'monitoring:read', 'health:read', 'errors:read', 'errors:resolve', 'logs:read', 'audit:read',
-    'settings:read', 'settings:manage',
+    'security:read', 'settings:read', 'settings:manage',
   ],
-  SUPPORT_ENGINEER: [
-    'organization:read', 'organization:impersonate', 'users:read', 'monitoring:read', 'health:read',
-    'audit:read', 'logs:read', 'settings:read',
+  ADMIN: [
+    'organization:read', 'organization:create', 'organization:update',
+    'users:read', 'users:manage', 'roles:read', 'permissions:read', 'modules:manage',
+    'monitoring:read', 'health:read', 'errors:read', 'logs:read', 'audit:read',
+    'security:read', 'settings:read',
   ],
-  PLATFORM_AUDITOR: [
-    'audit:read', 'logs:read', 'monitoring:read', 'health:read', 'security:read', 'errors:read',
+  MANAGER: [
+    'organization:read', 'users:read', 'roles:read', 'permissions:read',
+    'monitoring:read', 'health:read', 'errors:read', 'audit:read', 'logs:read', 'settings:read',
+  ],
+  EMPLOYEE: [
+    'organization:read', 'users:read', 'health:read', 'settings:read',
   ],
 };
 
@@ -81,6 +86,20 @@ async function main() {
         create: { roleId: role.id, permissionId: permission.id },
       });
     }
+  }
+
+  // 2b. Deactivate/soft-delete platform roles that are no longer part of the
+  // canonical role set (keeps the platform role list to exactly the 5 CRM roles).
+  const KEEP_ROLE_NAMES = new Set(Object.keys(ROLE_PERMISSIONS));
+  const obsoleteRoles = await prisma.platformRole.findMany({
+    where: { name: { notIn: [...KEEP_ROLE_NAMES] } },
+    select: { id: true, name: true },
+  });
+  for (const r of obsoleteRoles) {
+    await prisma.platformRole.update({
+      where: { id: r.id },
+      data: { isActive: false, isDeleted: true, deletedAt: new Date() },
+    });
   }
 
   // 3. Super admin user

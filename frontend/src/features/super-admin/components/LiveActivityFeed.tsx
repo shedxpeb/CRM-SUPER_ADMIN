@@ -31,7 +31,6 @@ const moduleIconMap: Record<string, any> = {
   settings: Settings,
   security: Shield,
   alert: AlertTriangle,
-  impersonation: Shield,
 };
 
 const actionColorMap: Record<string, string> = {

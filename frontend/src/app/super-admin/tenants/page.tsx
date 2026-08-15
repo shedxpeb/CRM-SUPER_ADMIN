@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ColumnDef } from '@tanstack/react-table';
-import { Plus, Building2, Eye, Ban, Undo2, UserCog, Settings2, FileText, MoreVertical, Users } from 'lucide-react';
+import { Plus, Building2, Eye, Ban, Undo2, Settings2, FileText, MoreVertical, Users } from 'lucide-react';
 import { PageHeader } from '@/components/sa/PageHeader';
 import { DataTable, Pagination } from '@/components/sa/DataTable';
 import { StatusBadge } from '@/components/sa/StatusBadge';
@@ -34,7 +34,6 @@ import {
   useCreateTenant,
   useSuspendTenant,
   useUnsuspendTenant,
-  useImpersonateTenant,
 } from '@/lib/queries';
 import { Can, useCan } from '@/features/auth/rbac';
 import { formatNumber, formatBytes, timeAgo, formatDate } from '@/lib/format';
@@ -50,8 +49,6 @@ export default function TenantsPage() {
   const [searchInput, setSearchInput] = useState('');
   const [status, setStatus] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
-  const [detail, setDetail] = useState<Tenant | null>(null);
-  const [impersonateReason, setImpersonateReason] = useState('');
 
   const { data, isLoading, isError, refetch } = useTenants({
     page,
@@ -63,11 +60,11 @@ export default function TenantsPage() {
   const createTenant = useCreateTenant();
   const suspendTenant = useSuspendTenant();
   const unsuspendTenant = useUnsuspendTenant();
-  const impersonate = useImpersonateTenant();
 
   const handleCreate = async (input: {
     name: string;
     email?: string;
+    initialPassword?: string;
     maxUsers?: number;
     maxStorageGB?: number;
   }) => {
@@ -189,20 +186,6 @@ export default function TenantsPage() {
             <Settings2 className="h-3 w-3" />
             Edit
           </Button>
-          {can('organization:impersonate') && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 px-2 gap-1.5 text-xs"
-              onClick={() => {
-                setDetail(row.original);
-                setImpersonateReason('');
-              }}
-            >
-              <UserCog className="h-3 w-3" />
-              Login As
-            </Button>
-          )}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
@@ -306,48 +289,6 @@ export default function TenantsPage() {
         />
       )}
 
-      {detail && (
-        <Dialog open onOpenChange={() => setDetail(null)}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Impersonate {detail.name}</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4 pt-2">
-              <p className="text-sm text-sa-text-muted">
-                You&apos;ll receive a scoped grant token to access this tenant as its super admin. The session is
-                audited and expires in 30 minutes.
-              </p>
-              <Input
-                placeholder="Reason (audit log)"
-                value={impersonateReason}
-                onChange={(e) => setImpersonateReason(e.target.value)}
-              />
-              <div className="flex justify-end gap-2">
-                <Button variant="ghost" onClick={() => setDetail(null)}>
-                  Cancel
-                </Button>
-                <Button
-                  disabled={impersonate.isPending}
-                  onClick={async () => {
-                    const res = await impersonate.mutateAsync({
-                      id: detail.id,
-                      reason: impersonateReason || 'Console impersonation',
-                    });
-                    if (res?.token) {
-                      localStorage.setItem('sa_impersonation_grant', res.token);
-                    }
-                    setDetail(null);
-                  }}
-                  className="gap-2"
-                >
-                  <UserCog className="h-4 w-4" />
-                  Start Session
-                </Button>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
-      )}
     </div>
     </RouteGuard>
   );
@@ -362,14 +303,20 @@ function TenantCreateDialog({
   onSubmit: (input: {
     name: string;
     email?: string;
+    initialPassword?: string;
     maxUsers?: number;
     maxStorageGB?: number;
   }) => Promise<void>;
   loading: boolean;
 }) {
   const [name, setName] = useState('');
+
+
+  
   const [email, setEmail] = useState('');
+  const [initialPassword, setInitialPassword] = useState('');
   const [maxUsers, setMaxUsers] = useState('10');
+  const [maxStorageGB, setMaxStorageGB] = useState('5');
   const [error, setError] = useState('');
 
   return (
@@ -384,7 +331,7 @@ function TenantCreateDialog({
             e.preventDefault();
             setError('');
             try {
-              await onSubmit({ name, email: email || undefined, maxUsers: Number(maxUsers) });
+              await onSubmit({ name, email: email || undefined, initialPassword: initialPassword || undefined, maxUsers: Number(maxUsers), maxStorageGB: Number(maxStorageGB) });
             } catch (err) {
               setError(err instanceof Error ? err.message : 'Failed to create tenant');
             }
@@ -401,16 +348,47 @@ function TenantCreateDialog({
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              required
               placeholder="admin@acme.com"
             />
+            <p className="text-xs text-sa-text-dim mt-1">
+              The tenant admin account is created with this email.
+            </p>
+          </div>
+          <div>
+            <label className="block text-xs font-medium mb-1.5 text-sa-text-muted">
+              Initial admin password <span className="text-sa-text-dim">(optional)</span>
+            </label>
+            <Input
+              type="password"
+              minLength={8}
+              value={initialPassword}
+              onChange={(e) => setInitialPassword(e.target.value)}
+              placeholder="Min 8 characters"
+              autoComplete="new-password"
+            />
+            <p className="text-xs text-sa-text-dim mt-1">
+              Leave blank to let the admin set their own password via email OTP (Forgot password).
+            </p>
           </div>
           <div>
             <label className="block text-xs font-medium mb-1.5 text-sa-text-muted">Max users</label>
             <Input
               type="number"
               min={1}
+              max={1000}
               value={maxUsers}
               onChange={(e) => setMaxUsers(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium mb-1.5 text-sa-text-muted">Max storage (GB)</label>
+            <Input
+              type="number"
+              min={1}
+              max={1000}
+              value={maxStorageGB}
+              onChange={(e) => setMaxStorageGB(e.target.value)}
             />
           </div>
           <div className="flex justify-end gap-2 pt-2">
@@ -426,3 +404,4 @@ function TenantCreateDialog({
     </Dialog>
   );
 }
+

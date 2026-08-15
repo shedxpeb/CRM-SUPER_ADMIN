@@ -6,11 +6,19 @@ import { ListPlatformSettingsDto } from './dto/list-platform-settings.dto';
 import { UpdatePlatformSettingDto } from './dto/update-platform-setting.dto';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { MODULE_CATALOG } from '../../common/constants/module-catalog.constants';
 
 @ApiTags('platform')
 @Controller('platform')
 export class PlatformController {
   constructor(private readonly platformService: PlatformService) {}
+
+  @Get('modules')
+  @RequirePermissions('platform:read')
+  @ApiOperation({ summary: 'Get the platform module catalog (keys, labels, categories)' })
+  moduleCatalog() {
+    return MODULE_CATALOG;
+  }
 
   @Get('settings')
   @RequirePermissions('platform:read')

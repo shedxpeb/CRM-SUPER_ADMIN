@@ -10,8 +10,6 @@ import { timeAgo } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { RouteGuard } from '@/features/auth/RouteGuard';
 
-const SERVICE_CANDIDATES = ['api-gateway', 'auth-service', 'tenant-service', 'crm-service', 'worker', 'database'];
-
 export default function HealthChecksPage() {
   const logs = useSystemLogs({ page: 1, pageSize: 500 });
 
@@ -29,9 +27,7 @@ export default function HealthChecksPage() {
       if (log.level === 'WARN') rec.warns += 1;
       if (new Date(log.createdAt) > new Date(rec.last)) rec.last = log.createdAt;
     }
-    const names = [...new Set([...SERVICE_CANDIDATES, ...byService.keys()])];
-    return names.map((name) => {
-      const rec = byService.get(name) ?? { errors: 0, warns: 0, last: '' };
+    return [...byService.entries()].map(([name, rec]) => {
       const status = rec.errors > 0 ? 'degraded' : rec.warns > 0 ? 'warning' : 'operational';
       return { name, ...rec, status };
     });
@@ -58,27 +54,33 @@ export default function HealthChecksPage() {
           }
         />
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-        {services.map((s) => {
-          const Icon = s.status === 'operational' ? CheckCircle2 : AlertCircle;
-          return (
-            <Card key={s.name} className={cn('bg-sa-card border', s.status === 'degraded' ? 'border-red-500/30' : s.status === 'warning' ? 'border-yellow-500/30' : 'border-sa-border')}>
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-mono text-sa-text-secondary truncate">{s.name}</p>
-                  <Icon className={cn('h-4 w-4 shrink-0', s.status === 'degraded' ? 'text-red-400' : s.status === 'warning' ? 'text-yellow-400' : 'text-green-500')} />
-                </div>
-                <div className="mt-2 flex items-center gap-2 text-xs">
-                  <StatusBadge status={s.status === 'operational' ? 'SUCCESS' : s.status === 'warning' ? 'WARNING' : 'FAILED'} />
-                </div>
-                <p className="text-[10px] text-sa-text-dim mt-2">
-                  {s.errors} errors · {s.warns} warnings {s.last ? `· last ${timeAgo(s.last)}` : '· no logs'}
-                </p>
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
+      {services.length === 0 ? (
+        <div className="rounded-xl border border-sa-border p-10 text-center text-sm text-sa-text-muted">
+          No service activity recorded yet — health status will appear once services emit logs.
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+          {services.map((s) => {
+            const Icon = s.status === 'operational' ? CheckCircle2 : AlertCircle;
+            return (
+              <Card key={s.name} className={cn('bg-sa-card border', s.status === 'degraded' ? 'border-red-500/30' : s.status === 'warning' ? 'border-yellow-500/30' : 'border-sa-border')}>
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-mono text-sa-text-secondary truncate">{s.name}</p>
+                    <Icon className={cn('h-4 w-4 shrink-0', s.status === 'degraded' ? 'text-red-400' : s.status === 'warning' ? 'text-yellow-400' : 'text-green-500')} />
+                  </div>
+                  <div className="mt-2 flex items-center gap-2 text-xs">
+                    <StatusBadge status={s.status === 'operational' ? 'SUCCESS' : s.status === 'warning' ? 'WARNING' : 'FAILED'} />
+                  </div>
+                  <p className="text-[10px] text-sa-text-dim mt-2">
+                    {s.errors} errors · {s.warns} warnings {s.last ? `· last ${timeAgo(s.last)}` : '· no logs'}
+                  </p>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      )}
     </div>
     </RouteGuard>
   );
