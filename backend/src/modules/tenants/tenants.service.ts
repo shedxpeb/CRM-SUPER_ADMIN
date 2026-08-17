@@ -64,7 +64,14 @@ export class TenantsService {
   async create(dto: CreateTenantDto, actor: { id: string; email: string }) {
     const slug = dto.slug.trim().toLowerCase();
     const existing = await this.prisma.tenant.findUnique({ where: { slug } });
-    if (existing) throw new ConflictException('A tenant with this slug already exists');
+    // A row left behind by a failed CRM provisioning attempt (FAILED, never
+    // linked) would otherwise block re-creating the same tenant forever with a
+    // 409. Allow it to be reused and provisioned again.
+    const isReusableFailure =
+      existing?.syncState === 'FAILED' && !existing.crmOrganizationId;
+    if (existing && !isReusableFailure) {
+      throw new ConflictException('A tenant with this slug already exists');
+    }
 
     if (dto.domain) {
       const clash = await this.prisma.tenant.findUnique({ where: { domain: dto.domain } });
@@ -73,26 +80,35 @@ export class TenantsService {
 
     const defaultModules = [...MODULE_CATALOG_KEYS];
 
-    // Step 1: Create Platform DB Tenant record with SYNCING state
+    // Step 1: Create (or reuse a failed, never-synced attempt) the Platform DB
+    // Tenant record with SYNCING state
     let tenant;
     try {
-      tenant = await this.prisma.tenant.create({
-        data: {
-          name: dto.name.trim(),
-          slug,
-          email: dto.email,
-          phone: dto.phone,
-          domain: dto.domain,
-          status: dto.status ?? TenantStatus.ACTIVE,
-          maxUsers: dto.maxUsers ?? 25,
-          maxStorageGB: dto.maxStorageGB ?? 10,
-          notes: dto.notes,
-          createdById: actor.id,
-          syncState: 'SYNCING',
-          syncVersion: 1,
-        },
-        select: TENANT_SELECT,
-      });
+      const baseData = {
+        name: dto.name.trim(),
+        slug,
+        email: dto.email,
+        phone: dto.phone,
+        domain: dto.domain,
+        status: dto.status ?? TenantStatus.ACTIVE,
+        maxUsers: dto.maxUsers ?? 25,
+        maxStorageGB: dto.maxStorageGB ?? 10,
+        notes: dto.notes,
+        syncState: 'SYNCING' as const,
+        syncVersion: 1,
+      };
+      if (existing && isReusableFailure) {
+        tenant = await this.prisma.tenant.update({
+          where: { id: existing.id },
+          data: { ...baseData, syncError: null, updatedById: actor.id, version: { increment: 1 } },
+          select: TENANT_SELECT,
+        });
+      } else {
+        tenant = await this.prisma.tenant.create({
+          data: { ...baseData, createdById: actor.id },
+          select: TENANT_SELECT,
+        });
+      }
     } catch {
       throw new BadRequestException('Failed to create tenant in platform database');
     }
@@ -197,16 +213,18 @@ export class TenantsService {
       adminPasswordSet = provisioned.passwordSet;
       adminUserEmail = dto.email.toLowerCase();
     } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
       await this.prisma.tenant.update({
         where: { id: tenant.id },
         data: {
           syncState: 'FAILED',
-          syncError:
-            error instanceof Error ? error.message : 'Failed to provision CRM organization',
+          syncError: detail,
           version: { increment: 1 },
         },
       });
-      throw new BadRequestException('Failed to provision CRM organization for tenant');
+      throw new BadRequestException(
+        `Failed to provision CRM organization for tenant: ${detail.slice(0, 300)}`,
+      );
     }
 
     // Step 3: Link tenant to the provisioned CRM organization and mark SYNCED
@@ -224,15 +242,17 @@ export class TenantsService {
         select: TENANT_SELECT,
       });
     } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
       await this.prisma.tenant.update({
         where: { id: tenant.id },
         data: {
           syncState: 'FAILED',
-          syncError:
-            error instanceof Error ? error.message : 'Failed to link tenant to CRM organization',
+          syncError: detail,
         },
       });
-      throw new BadRequestException('Failed to link tenant to CRM organization');
+      throw new BadRequestException(
+        `Failed to link tenant to CRM organization: ${detail.slice(0, 300)}`,
+      );
     }
 
     // Step 4: Create audit log entry
