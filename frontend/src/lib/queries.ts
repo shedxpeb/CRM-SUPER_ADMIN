@@ -87,6 +87,17 @@ export function useTenantModules(id: string) {
   });
 }
 
+export function useRetryTenantProvisioning() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => tenantsApi.retryTenantProvisioning(id),
+    onSuccess: (_data, id) => {
+      qc.invalidateQueries({ queryKey: ['tenants', id] });
+      qc.invalidateQueries({ queryKey: ['tenants'] });
+    },
+  });
+}
+
 export function useUpdateTenantModules() {
   const qc = useQueryClient();
   return useMutation({

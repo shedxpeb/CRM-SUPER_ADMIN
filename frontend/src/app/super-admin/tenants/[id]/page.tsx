@@ -25,6 +25,7 @@ import {
   Puzzle,
   LogIn,
   UserPlus,
+  RefreshCw,
 } from 'lucide-react';
 import { PageHeader, LoadingState, ErrorState } from '@/components/sa/PageHeader';
 import { StatusBadge } from '@/components/sa/StatusBadge';
@@ -44,6 +45,7 @@ import {
   useTenantModules,
   useTenantLoginHistory,
   useUpdateTenantModules,
+  useRetryTenantProvisioning,
   useTenantAssignableRoles,
   useCreateTenantUser,
   useCreateTenantRole,
@@ -159,6 +161,7 @@ export default function TenantDetailPage() {
   const unsuspend = useUnsuspendTenant();
   const updateTenant = useUpdateTenant();
   const updateTenantModules = useUpdateTenantModules();
+  const retryProvisioning = useRetryTenantProvisioning();
   const assignableRoles = useTenantAssignableRoles(id);
 
   if (tenant.isError || !tenant.data)
@@ -197,9 +200,33 @@ export default function TenantDetailPage() {
           )}
           <p className="mt-1.5 text-xs text-red-300/70">
             This tenant is not linked to a CRM organization, so user/role/module data is empty and
-            writes are disabled. Go back and re-create the tenant with the same name to retry
-            provisioning — the failure detail above (or the backend startup log) shows what to fix.
+            writes are disabled.
           </p>
+          <div className="mt-3 flex flex-col gap-2">
+            <Can required="organization:update">
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-1.5 border-red-500/40 text-red-300 hover:bg-red-500/10 hover:text-red-200"
+                disabled={retryProvisioning.isPending || t.syncState === 'SYNCING'}
+                onClick={() => retryProvisioning.mutate(id)}
+              >
+                <RefreshCw
+                  className={cn('h-3.5 w-3.5', retryProvisioning.isPending && 'animate-spin')}
+                />
+                {retryProvisioning.isPending
+                  ? 'Provisioning…'
+                  : t.syncState === 'SYNCING'
+                    ? 'Provisioning in progress…'
+                    : 'Retry provisioning'}
+              </Button>
+            </Can>
+            {retryProvisioning.isError && (
+              <p className="text-xs text-red-300/80">
+                {retryProvisioning.error?.message || 'Retry failed. See backend logs for details.'}
+              </p>
+            )}
+          </div>
         </div>
       )}
 

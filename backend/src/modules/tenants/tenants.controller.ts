@@ -56,6 +56,13 @@ export class TenantsController {
     return this.tenantsService.restore(id, { id: actor.id, email: actor.email });
   }
 
+  @Post(':id/retry-provisioning')
+  @RequirePermissions('organization:update')
+  @ApiOperation({ summary: 'Retry CRM provisioning for a failed tenant' })
+  retryProvisioning(@Param('id') id: string, @CurrentUser() actor: CurrentUser) {
+    return this.tenantsService.retryProvisioning(id, { id: actor.id, email: actor.email });
+  }
+
   @Post(':id/suspend')
   @RequirePermissions('organization:suspend')
   @ApiOperation({ summary: 'Suspend a tenant' })

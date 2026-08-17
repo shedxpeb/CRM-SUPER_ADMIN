@@ -15,6 +15,14 @@ export class CrmPrismaService extends PrismaClient implements OnModuleInit, OnMo
           url: process.env.CRM_DATABASE_URL || process.env.DATABASE_URL,
         },
       },
+      // Tenant provisioning runs one interactive transaction with ~25
+      // sequential statements (org + roles + modules + user). The 5s Prisma
+      // default can expire under slow network conditions (P2028 "Transaction
+      // not found"), so give provisioning room to breathe.
+      transactionOptions: {
+        maxWait: 10_000,
+        timeout: 60_000,
+      },
     });
   }
 

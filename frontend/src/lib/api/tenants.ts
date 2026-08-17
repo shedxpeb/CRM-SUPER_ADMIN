@@ -53,6 +53,11 @@ export async function updateTenant(
   return res.data;
 }
 
+export async function retryTenantProvisioning(id: string): Promise<Tenant> {
+  const res = await api.post<Tenant>(`/tenants/${id}/retry-provisioning`);
+  return res.data;
+}
+
 export async function suspendTenant(id: string, reason?: string): Promise<{ success: boolean; message: string; tenant: Tenant }> {
   const res = await api.post<{ success: boolean; message: string; tenant: Tenant }>(`/tenants/${id}/suspend`, reason ? { reason } : {});
   return res.data;

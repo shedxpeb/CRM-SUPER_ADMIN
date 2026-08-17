@@ -120,95 +120,17 @@ export class TenantsService {
     let adminUserEmail: string | null = null;
     let adminPasswordSet = false;
     try {
-      const provisioned = await this.crmPrisma.$transaction(async (crmTx) => {
-        const crmOrg = await crmTx.organization.create({
-          data: {
-            name: dto.name.trim(),
-            slug,
-            email: dto.email,
-            status: 'Active',
-            maxUsers: dto.maxUsers ?? 25,
-            maxStorageGb: dto.maxStorageGB ?? 10,
-            roleHierarchyEnabled: true,
-            maxRoleDepth: 5,
-            // The full permission catalog becomes the tenant's delegation pool,
-            // so the tenant admin can grant any CRM permission to their roles.
-            permissionPool: JSON.stringify(Object.values(CRM_PERMISSION_CATALOG).flat()),
-          },
-        });
-
-        const createdRoles: { id: string; code: string | null }[] = [];
-        for (const role of CRM_SYSTEM_ROLES) {
-          const created = await crmTx.role.create({
-            data: {
-              organizationId: crmOrg.id,
-              name: role.name,
-              code: role.code,
-              permissions: [...role.permissions],
-              isSystem: true,
-            },
-            select: { id: true, code: true },
-          });
-          createdRoles.push(created);
-        }
-
-        // Enable default modules (canonical singular keys so the CRM guards
-        // resolve them; platform keeps plural keys in modulesEnabled).
-        const moduleKeys = Array.from(
-          new Set([...defaultModules.map((m) => normalizeModuleKey(m)), ...CRM_DEFAULT_MODULES]),
-        );
-        for (const moduleKey of moduleKeys) {
-          await crmTx.organizationModule.create({
-            data: {
-              organizationId: crmOrg.id,
-              moduleKey,
-              enabled: true,
-              enabledAt: new Date(),
-            },
-          });
-        } // Step 2b: Create the tenant admin user.
-        // If the platform operator supplied an initialPassword it is set directly;
-        // otherwise the user is created without a usable password and sets their own
-        // through the CRM OTP (forgot-password) flow. No password is ever
-        // auto-generated and returned by this API.
-        const existingUser = await crmTx.user.findFirst({
-          where: { email: dto.email.toLowerCase(), isDeleted: false },
-        });
-        if (existingUser) {
-          throw new ConflictException(`A user with email ${dto.email} already exists in the CRM`);
-        }
-        const adminUser = await crmTx.user.create({
-          data: {
-            email: dto.email.toLowerCase(),
-            name: dto.name.trim(),
-            role: 'ADMIN',
-            organizationId: crmOrg.id,
-            password: dto.initialPassword
-              ? await bcrypt.hash(dto.initialPassword, 10)
-              : await bcrypt.hash(crypto.randomUUID(), 10),
-            isActive: true,
-            isVerified: true,
-            mustChangePassword: false,
-            version: 1,
-          },
-        });
-
-        // Link the admin user to the system ADMIN role so RBAC resolves their
-        // permissions (the CRM resolves effective permissions via UserRole).
-        const adminRole = createdRoles.find((r) => r.code === 'ADMIN');
-        if (adminRole) {
-          await crmTx.userRole.create({
-            data: {
-              userId: adminUser.id,
-              roleId: adminRole.id,
-              organizationId: crmOrg.id,
-              assignedAt: new Date(),
-            },
-          });
-        }
-
-        return { crmOrgId: crmOrg.id, passwordSet: !!dto.initialPassword };
-      });
+      const provisioned = await this.runProvisioning(
+        {
+          id: tenant.id,
+          name: dto.name.trim(),
+          slug,
+          email: dto.email,
+          maxUsers: dto.maxUsers ?? 25,
+          maxStorageGB: dto.maxStorageGB ?? 10,
+        },
+        { initialPassword: dto.initialPassword },
+      );
       crmOrganizationId = provisioned.crmOrgId;
       adminPasswordSet = provisioned.passwordSet;
       adminUserEmail = dto.email.toLowerCase();
@@ -296,6 +218,193 @@ export class TenantsService {
           }
         : null,
     };
+  }
+
+  /**
+   * Retries CRM provisioning for a tenant whose previous attempt failed and
+   * which is not yet linked to a CRM organization. Refuses to run when the
+   * tenant is already linked or a sync is already in flight, so it can never
+   * duplicate an organization.
+   */
+  async retryProvisioning(id: string, actor: { id: string; email: string }) {
+    const existing = await this.prisma.tenant.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        email: true,
+        maxUsers: true,
+        maxStorageGB: true,
+        crmOrganizationId: true,
+        syncState: true,
+        isDeleted: true,
+      },
+    });
+    if (!existing || existing.isDeleted) {
+      throw new NotFoundException('Tenant not found');
+    }
+    if (existing.crmOrganizationId) {
+      throw new ConflictException('Tenant is already linked to a CRM organization');
+    }
+    if (existing.syncState === 'SYNCING') {
+      throw new ConflictException('Provisioning is already in progress — refresh in a moment');
+    }
+    if (!existing.email) {
+      throw new BadRequestException(
+        'Tenant has no email address — edit the tenant to set one before retrying provisioning',
+      );
+    }
+
+    // Mark the attempt in flight and clear the stale error immediately so the
+    // UI stops showing the previous failure while we work.
+    await this.prisma.tenant.update({
+      where: { id },
+      data: {
+        syncState: 'SYNCING',
+        syncError: null,
+        updatedById: actor.id,
+        version: { increment: 1 },
+      },
+    });
+
+    try {
+      const provisioned = await this.runProvisioning(existing, {});
+      return await this.prisma.tenant.update({
+        where: { id },
+        data: {
+          crmOrganizationId: provisioned.crmOrgId,
+          syncState: 'SYNCED',
+          lastSyncedAt: new Date(),
+          syncVersion: { increment: 1 },
+          modulesEnabled: [...MODULE_CATALOG_KEYS],
+          updatedById: actor.id,
+          version: { increment: 1 },
+        },
+        select: TENANT_SELECT,
+      });
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      await this.prisma.tenant.update({
+        where: { id },
+        data: { syncState: 'FAILED', syncError: detail, version: { increment: 1 } },
+      });
+      throw new BadRequestException(
+        `Failed to provision CRM organization for tenant: ${detail.slice(0, 300)}`,
+      );
+    }
+  }
+
+  /**
+   * Provisions a CRM organization (org + system roles + default modules +
+   * admin user) for a platform tenant. Runs inside a transaction so a failure
+   * rolls back completely and the tenant can be retried without orphans.
+   */
+  private async runProvisioning(
+    tenant: {
+      id: string;
+      name: string;
+      slug: string;
+      email: string | null | undefined;
+      maxUsers: number;
+      maxStorageGB: number;
+    },
+    opts: { initialPassword?: string } = {},
+  ): Promise<{ crmOrgId: string; passwordSet: boolean }> {
+    return this.crmPrisma.$transaction(async (crmTx) => {
+      const crmOrg = await crmTx.organization.create({
+        data: {
+          name: tenant.name,
+          slug: tenant.slug,
+          email: tenant.email,
+          status: 'Active',
+          maxUsers: tenant.maxUsers,
+          maxStorageGb: tenant.maxStorageGB,
+          roleHierarchyEnabled: true,
+          maxRoleDepth: 5,
+          // The full permission catalog becomes the tenant's delegation pool,
+          // so the tenant admin can grant any CRM permission to their roles.
+          permissionPool: JSON.stringify(Object.values(CRM_PERMISSION_CATALOG).flat()),
+        },
+      });
+
+      const createdRoles: { id: string; code: string | null }[] = [];
+      for (const role of CRM_SYSTEM_ROLES) {
+        const created = await crmTx.role.create({
+          data: {
+            organizationId: crmOrg.id,
+            name: role.name,
+            code: role.code,
+            permissions: [...role.permissions],
+            isSystem: true,
+          },
+          select: { id: true, code: true },
+        });
+        createdRoles.push(created);
+      }
+
+      // Enable default modules (canonical singular keys so the CRM guards
+      // resolve them; platform keeps plural keys in modulesEnabled).
+      const moduleKeys = Array.from(
+        new Set([
+          ...MODULE_CATALOG_KEYS.map((m) => normalizeModuleKey(m)),
+          ...CRM_DEFAULT_MODULES,
+        ]),
+      );
+      for (const moduleKey of moduleKeys) {
+        await crmTx.organizationModule.create({
+          data: {
+            organizationId: crmOrg.id,
+            moduleKey,
+            enabled: true,
+            enabledAt: new Date(),
+          },
+        });
+      }
+
+      // Create the tenant admin user. If an initialPassword was supplied it is
+      // set directly; otherwise the user is created without a usable password
+      // and sets their own through the CRM OTP (forgot-password) flow. No
+      // password is ever auto-generated and returned by this API.
+      const userEmail = tenant.email?.toLowerCase() ?? '';
+      const existingUser = await crmTx.user.findFirst({
+        where: { email: userEmail, isDeleted: false },
+      });
+      if (existingUser) {
+        throw new ConflictException(`A user with email ${tenant.email} already exists in the CRM`);
+      }
+      const adminUser = await crmTx.user.create({
+        data: {
+          email: userEmail,
+          name: tenant.name,
+          role: 'ADMIN',
+          organizationId: crmOrg.id,
+          password: opts.initialPassword
+            ? await bcrypt.hash(opts.initialPassword, 10)
+            : await bcrypt.hash(crypto.randomUUID(), 10),
+          isActive: true,
+          isVerified: true,
+          mustChangePassword: false,
+          version: 1,
+        },
+      });
+
+      // Link the admin user to the system ADMIN role so RBAC resolves their
+      // permissions (the CRM resolves effective permissions via UserRole).
+      const adminRole = createdRoles.find((r) => r.code === 'ADMIN');
+      if (adminRole) {
+        await crmTx.userRole.create({
+          data: {
+            userId: adminUser.id,
+            roleId: adminRole.id,
+            organizationId: crmOrg.id,
+            assignedAt: new Date(),
+          },
+        });
+      }
+
+      return { crmOrgId: crmOrg.id, passwordSet: !!opts.initialPassword };
+    });
   }
 
   async findAll(dto: ListTenantsDto) {
