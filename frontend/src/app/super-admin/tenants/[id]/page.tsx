@@ -166,6 +166,10 @@ export default function TenantDetailPage() {
 
   const t = tenant.data;
   const health = getTenantHealth(t);
+  // A tenant whose CRM provisioning failed (or was never attempted) has no
+  // crmOrganizationId. Reads return empty, but writes against the CRM are
+  // blocked — surface that state instead of letting actions fail with 400s.
+  const linked = !!t.crmOrganizationId;
 
   const selectTab = (key: string) => {
     setTab(key);
@@ -182,6 +186,22 @@ export default function TenantDetailPage() {
           <ArrowLeft className="h-3.5 w-3.5" />
           Back to tenants
         </button>
+
+      {(!linked || t.syncState === 'FAILED') && (
+        <div className="mb-4 rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm">
+          <p className="font-medium text-red-300">
+            CRM provisioning {t.syncState === 'FAILED' ? 'failed' : 'was never completed'}
+          </p>
+          {t.syncError && (
+            <p className="mt-1.5 font-mono text-xs text-red-300/80 break-all">{t.syncError}</p>
+          )}
+          <p className="mt-1.5 text-xs text-red-300/70">
+            This tenant is not linked to a CRM organization, so user/role/module data is empty and
+            writes are disabled. Go back and re-create the tenant with the same name to retry
+            provisioning — the failure detail above (or the backend startup log) shows what to fix.
+          </p>
+        </div>
+      )}
 
       <PageHeader
         title={t.name}
@@ -317,7 +337,7 @@ export default function TenantDetailPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-base text-sa-text">Users</CardTitle>
-            <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setCreateUserOpen(true)}>
+            <Button variant="outline" size="sm" className="gap-1.5" disabled={!linked} onClick={() => setCreateUserOpen(true)}>
               <UserPlus className="h-3.5 w-3.5" />
               Add User
             </Button>
@@ -348,7 +368,7 @@ export default function TenantDetailPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-base text-sa-text">Roles</CardTitle>
-            <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setCreateRoleOpen(true)}>
+            <Button variant="outline" size="sm" className="gap-1.5" disabled={!linked} onClick={() => setCreateRoleOpen(true)}>
               <ShieldCheck className="h-3.5 w-3.5" />
               Add Role
             </Button>

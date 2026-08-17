@@ -41,6 +41,19 @@ async function ensureTenant(
   return { id: tenant.id, crmOrganizationId: tenant.crmOrganizationId, name: tenant.name };
 }
 
+// Variant for read-only lookups: a tenant whose CRM provisioning failed may
+// legitimately have no crmOrganizationId yet. Reads must return empty/404 for
+// it instead of a 400, otherwise every sub-panel on the detail page floods the
+// console with errors. Mutations still use ensureTenant() and stay blocked.
+async function ensureTenantLoose(
+  prisma: PrismaService,
+  tenantId: string,
+): Promise<{ id: string; crmOrganizationId: string | null; name: string }> {
+  const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
+  if (!tenant || tenant.isDeleted) throw new NotFoundException('Tenant not found');
+  return { id: tenant.id, crmOrganizationId: tenant.crmOrganizationId, name: tenant.name };
+}
+
 @Injectable()
 export class TenantOpsService {
   constructor(
@@ -52,7 +65,7 @@ export class TenantOpsService {
   // ── Activity / Modules ──────────────────────────────────────────────────────
 
   async getActivity(tenantId: string, dto: PaginationDto) {
-    await ensureTenant(this.prisma, tenantId);
+    await ensureTenantLoose(this.prisma, tenantId);
     const { page, skip, take } = resolvePage(dto);
     const where = { tenantId };
     const [items, total] = await Promise.all([
@@ -283,8 +296,11 @@ export class TenantOpsService {
   // ── Tenant users (CRM User) ─────────────────────────────────────────────────
 
   async getTenantUsers(tenantId: string, query: PaginationDto) {
-    const tenant = await ensureTenant(this.prisma, tenantId);
+    const tenant = await ensureTenantLoose(this.prisma, tenantId);
     const { page, skip, take } = resolvePage(query);
+    if (!tenant.crmOrganizationId) {
+      return { items: [], meta: buildPageMeta(page, take, 0, undefined) };
+    }
 
     const where = {
       organizationId: tenant.crmOrganizationId,
@@ -326,7 +342,8 @@ export class TenantOpsService {
   }
 
   async getTenantUser(tenantId: string, userId: string) {
-    const tenant = await ensureTenant(this.prisma, tenantId);
+    const tenant = await ensureTenantLoose(this.prisma, tenantId);
+    if (!tenant.crmOrganizationId) throw new NotFoundException('Tenant user not found');
     const user = await this.crmPrisma.user.findFirst({
       where: { id: userId, organizationId: tenant.crmOrganizationId, isDeleted: false },
       select: {
@@ -607,7 +624,8 @@ export class TenantOpsService {
   }
 
   async getTenantUserRoles(tenantId: string, userId: string) {
-    const tenant = await ensureTenant(this.prisma, tenantId);
+    const tenant = await ensureTenantLoose(this.prisma, tenantId);
+    if (!tenant.crmOrganizationId) throw new NotFoundException('Tenant user not found');
     const user = await this.crmPrisma.user.findFirst({
       where: { id: userId, organizationId: tenant.crmOrganizationId, isDeleted: false },
       select: { id: true, email: true },
@@ -714,7 +732,8 @@ export class TenantOpsService {
   // ── User permission overrides (grant/deny) ──────────────────────────────────
 
   async getTenantUserPermissions(tenantId: string, userId: string) {
-    const tenant = await ensureTenant(this.prisma, tenantId);
+    const tenant = await ensureTenantLoose(this.prisma, tenantId);
+    if (!tenant.crmOrganizationId) throw new NotFoundException('Tenant user not found');
     const user = await this.crmPrisma.user.findFirst({
       where: { id: userId, organizationId: tenant.crmOrganizationId, isDeleted: false },
       select: { id: true, email: true },
@@ -800,7 +819,8 @@ export class TenantOpsService {
   // ── User module access overrides ────────────────────────────────────────────
 
   async getTenantUserModules(tenantId: string, userId: string) {
-    const tenant = await ensureTenant(this.prisma, tenantId);
+    const tenant = await ensureTenantLoose(this.prisma, tenantId);
+    if (!tenant.crmOrganizationId) throw new NotFoundException('Tenant user not found');
     const user = await this.crmPrisma.user.findFirst({
       where: { id: userId, organizationId: tenant.crmOrganizationId, isDeleted: false },
       select: { id: true, email: true },
@@ -884,8 +904,11 @@ export class TenantOpsService {
   // ── Tenant roles (CRM Role) ─────────────────────────────────────────────────
 
   async getTenantRoles(tenantId: string, query: PaginationDto) {
-    const tenant = await ensureTenant(this.prisma, tenantId);
+    const tenant = await ensureTenantLoose(this.prisma, tenantId);
     const { page, skip, take } = resolvePage(query);
+    if (!tenant.crmOrganizationId) {
+      return { items: [], meta: buildPageMeta(page, take, 0, undefined) };
+    }
     const where = {
       organizationId: tenant.crmOrganizationId,
       isDeleted: false,
@@ -906,7 +929,8 @@ export class TenantOpsService {
   }
 
   async getTenantRole(tenantId: string, roleId: string) {
-    const tenant = await ensureTenant(this.prisma, tenantId);
+    const tenant = await ensureTenantLoose(this.prisma, tenantId);
+    if (!tenant.crmOrganizationId) throw new NotFoundException('Role not found');
     const role = await this.crmPrisma.role.findFirst({
       where: { id: roleId, organizationId: tenant.crmOrganizationId, isDeleted: false },
     });
@@ -1133,7 +1157,8 @@ export class TenantOpsService {
   }
 
   async getTenantPermissions(tenantId: string): Promise<Record<string, Record<string, boolean>>> {
-    const tenant = await ensureTenant(this.prisma, tenantId);
+    const tenant = await ensureTenantLoose(this.prisma, tenantId);
+    if (!tenant.crmOrganizationId) return {};
     const roles = await this.crmPrisma.role.findMany({
       where: { organizationId: tenant.crmOrganizationId, isDeleted: false },
       select: { permissions: true },
@@ -1154,8 +1179,11 @@ export class TenantOpsService {
   }
 
   async getTenantLoginHistory(tenantId: string, query: PaginationDto) {
-    const tenant = await ensureTenant(this.prisma, tenantId);
+    const tenant = await ensureTenantLoose(this.prisma, tenantId);
     const { page, skip, take } = resolvePage(query);
+    if (!tenant.crmOrganizationId) {
+      return { items: [], meta: buildPageMeta(page, take, 0, undefined) };
+    }
     const where = { organizationId: tenant.crmOrganizationId } as Record<string, unknown>;
     if (query.q) where.email = { contains: query.q, mode: 'insensitive' as const };
 
@@ -1172,8 +1200,11 @@ export class TenantOpsService {
   }
 
   async getTenantSessions(tenantId: string, query: PaginationDto & { active?: boolean }) {
-    const tenant = await ensureTenant(this.prisma, tenantId);
+    const tenant = await ensureTenantLoose(this.prisma, tenantId);
     const { page, skip, take } = resolvePage(query);
+    if (!tenant.crmOrganizationId) {
+      return { items: [], meta: buildPageMeta(page, take, 0, undefined) };
+    }
     const where = {
       organizationId: tenant.crmOrganizationId,
     } as Record<string, unknown>;
@@ -1224,7 +1255,8 @@ export class TenantOpsService {
   // ── Tenant roles listing for a user (candidates) ────────────────────────────
 
   async listAssignableRoles(tenantId: string) {
-    const tenant = await ensureTenant(this.prisma, tenantId);
+    const tenant = await ensureTenantLoose(this.prisma, tenantId);
+    if (!tenant.crmOrganizationId) return [];
     return this.crmPrisma.role.findMany({
       where: { organizationId: tenant.crmOrganizationId, isDeleted: false },
       select: { id: true, name: true, code: true, description: true, isSystem: true },

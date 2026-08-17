@@ -43,6 +43,7 @@ export interface Tenant {
   maxUsers: number;
   maxStorageGB: number;
   syncState: SyncState;
+  syncError?: string | null;
   notes?: string | null;
   version: number;
   isDeleted?: boolean;

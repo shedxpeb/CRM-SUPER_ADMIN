@@ -19,12 +19,38 @@ export class CrmPrismaService extends PrismaClient implements OnModuleInit, OnMo
   }
 
   async onModuleInit() {
+    const source = process.env.CRM_DATABASE_URL ? 'CRM_DATABASE_URL' : 'DATABASE_URL (fallback)';
     try {
       await this.$connect();
-      this.logger.log('CRM database connected successfully');
+      // Verify the CRM schema is actually provisioned in the target database.
+      // Tenant creation writes to these tables on every create, so a missing
+      // CRM schema is the #1 cause of "POST /tenants 400" in production (the
+      // platform tables exist, so login/health work while provisioning fails).
+      const [orgCount, userCount] = await Promise.all([
+        this.organization.count(),
+        this.user.count(),
+      ]);
+      this.logger.log(
+        `CRM database connected successfully (source: ${source}, host: ${this.safeHost()}). ` +
+          `Schema OK — Organization rows: ${orgCount}, User rows: ${userCount}.`,
+      );
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
-      this.logger.warn(`CRM database connection failed: ${message}`);
+      this.logger.warn(
+        `CRM database check FAILED (source: ${source}, host: ${this.safeHost()}): ${message}. ` +
+          `Tenant creation will keep failing with 400 until the CRM schema is provisioned. ` +
+          `Fix: point CRM_DATABASE_URL at the CRM database and run ` +
+          `npx prisma migrate deploy --schema=prisma/crm-schema.prisma (or prisma db push) against it.`,
+      );
+    }
+  }
+
+  private safeHost(): string {
+    try {
+      const url = process.env.CRM_DATABASE_URL || process.env.DATABASE_URL || '';
+      return new URL(url).host;
+    } catch {
+      return 'unknown';
     }
   }
 
