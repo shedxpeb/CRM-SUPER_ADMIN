@@ -263,21 +263,8 @@ export function useCreateTenant() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: tenantsApi.createTenant,
-    onMutate: async (newTenant) => {
-      await qc.cancelQueries({ queryKey: ['tenants'] });
-      const previousTenants = qc.getQueryData(['tenants']);
-      qc.setQueryData(['tenants'], (old: any) => ({
-        ...old,
-        items: [newTenant, ...(old?.items || [])],
-      }));
-      return { previousTenants };
-    },
-    onError: (error, _, context) => {
-      console.error('Failed to create tenant:', error);
-      if (context?.previousTenants) {
-        qc.setQueryData(['tenants'], context.previousTenants);
-      }
-    },
+    // No optimistic insert: the list query key includes filters (qk.tenants(params)),
+    // so a partial tenant can't be placed into the correct cache slot. Refetch on success.
     onSuccess: () => qc.invalidateQueries({ queryKey: ['tenants'] }),
   });
 }

@@ -25,12 +25,12 @@ export default function SuperAdminLayout({
         <div style={{ paddingLeft: collapsed ? 68 : 220 }} className="transition-[padding-left] duration-300">
           <header className="sticky top-0 z-30 h-14 flex items-center justify-between px-6" style={{ background: 'var(--sa-card)', borderBottom: '1px solid var(--sa-border)' }}>
             <Link
-              href="/dashboard"
+              href="/super-admin"
               className="flex items-center gap-1.5 text-xs transition-colors"
               style={{ color: 'var(--sa-text-muted)' }}
             >
               <ArrowLeft className="h-3.5 w-3.5" />
-              Back to App
+              Dashboard
             </Link>
             <div className="flex items-center gap-2">
               <ThemeToggle />

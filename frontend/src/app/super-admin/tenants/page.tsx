@@ -68,8 +68,37 @@ export default function TenantsPage() {
     maxUsers?: number;
     maxStorageGB?: number;
   }) => {
-    const slug = input.name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
-    await createTenant.mutateAsync({ ...input, slug });
+    const name = input.name.trim();
+    if (name.length < 3) {
+      throw new Error('Organization name must be at least 3 characters.');
+    }
+    // Derive the slug exactly as the backend expects: lowercase, dashes, [a-z0-9-].
+    // Validate it here so invalid names fail with a clear message instead of a 400.
+    const slug = name
+      .toLowerCase()
+      .replace(/\s+/g, '-')
+      .replace(/[^a-z0-9-]/g, '')
+      .replace(/-+/g, '-')
+      .replace(/^-+|-+$/g, '');
+    if (slug.length < 3) {
+      throw new Error('Organization name must contain at least 3 letters or numbers.');
+    }
+    if (slug.length > 50) {
+      throw new Error('Organization name is too long — the derived slug must be 50 characters or fewer.');
+    }
+    if (
+      input.maxUsers !== undefined &&
+      (!Number.isInteger(input.maxUsers) || input.maxUsers < 1 || input.maxUsers > 1000)
+    ) {
+      throw new Error('Max users must be a whole number between 1 and 1000.');
+    }
+    if (
+      input.maxStorageGB !== undefined &&
+      (!Number.isInteger(input.maxStorageGB) || input.maxStorageGB < 1 || input.maxStorageGB > 1000)
+    ) {
+      throw new Error('Max storage must be a whole number between 1 and 1000 GB.');
+    }
+    await createTenant.mutateAsync({ ...input, name, slug });
     setCreateOpen(false);
   };
 
