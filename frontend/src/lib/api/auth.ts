@@ -7,8 +7,8 @@ export async function login(email: string, password: string) {
   return res.data;
 }
 
-export async function refreshToken(refreshToken?: string) {
-  const res = await api.post<import('../types').LoginResponse>('/auth/refresh', refreshToken ? { refreshToken } : {});
+export async function refreshToken() {
+  const res = await api.post<import('../types').LoginResponse>('/auth/refresh', {});
   return res.data;
 }
 

@@ -76,16 +76,19 @@ async function bootstrap() {
     secret: config.jwtSecret || 'dev-cookie-secret',
   });
 
-  const swagger = new DocumentBuilder()
-    .setTitle('PEB SUPER-ADMIN Platform API')
-    .setDescription('Enterprise control plane API')
-    .setVersion('1.0')
-    .addBearerAuth()
-    .addTag('health', 'Health checks')
-    .build();
+  // Expose Swagger only outside production (internal API documentation must not be public).
+  if (config.nodeEnv !== 'production') {
+    const swagger = new DocumentBuilder()
+      .setTitle('PEB SUPER-ADMIN Platform API')
+      .setDescription('Enterprise control plane API')
+      .setVersion('1.0')
+      .addBearerAuth()
+      .addTag('health', 'Health checks')
+      .build();
 
-  const document = SwaggerModule.createDocument(app, swagger);
-  SwaggerModule.setup('api-docs', app, document);
+    const document = SwaggerModule.createDocument(app, swagger);
+    SwaggerModule.setup('api-docs', app, document);
+  }
 
   await app.listen(config.port, '0.0.0.0');
 

@@ -7,6 +7,7 @@ import { TokenService } from './services/token.service';
 import { SessionService } from './services/session.service';
 import { LoginProtectionService } from './services/login-protection.service';
 import { AuditService } from './services/audit.service';
+import { AuthCookieInterceptor } from './cookie.interceptor';
 
 @Module({
   imports: [
@@ -24,7 +25,14 @@ import { AuditService } from './services/audit.service';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, TokenService, SessionService, LoginProtectionService, AuditService],
+  providers: [
+    AuthService,
+    TokenService,
+    SessionService,
+    LoginProtectionService,
+    AuditService,
+    AuthCookieInterceptor,
+  ],
   exports: [AuthService, TokenService, SessionService, AuditService, JwtModule],
 })
 export class AuthModule {}

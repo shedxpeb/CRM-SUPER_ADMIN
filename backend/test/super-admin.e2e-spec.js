@@ -8,7 +8,8 @@
 
 const BASE = 'http://localhost:8001';
 const EMAIL = 'admin@pebcrm.com';
-const PASSWORD = 'Admin@123';
+const PASSWORD = process.env.SUPER_ADMIN_PASSWORD;
+if (!PASSWORD) throw new Error('SUPER_ADMIN_PASSWORD env is required for e2e tests');
 const ORIGIN = 'http://localhost:3001';
 
 let passed = 0;

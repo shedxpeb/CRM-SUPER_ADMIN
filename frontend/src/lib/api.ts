@@ -1,7 +1,6 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 const API_PREFIX = '/api/v1';
 export const ACCESS_TOKEN_KEY = 'sa_access_token';
-export const REFRESH_TOKEN_KEY = 'sa_refresh_token';
 
 // Fail fast instead of silently pointing the production bundle at localhost.
 if (!API_URL) {
@@ -45,29 +44,26 @@ function getToken(): string | null {
 function handleUnauthorized() {
   if (typeof window === 'undefined') return;
   localStorage.removeItem(ACCESS_TOKEN_KEY);
-  localStorage.removeItem(REFRESH_TOKEN_KEY);
   if (!window.location.pathname.startsWith('/login')) {
     window.location.href = '/login';
   }
 }
 
 async function attemptRefresh(): Promise<string | null> {
-  const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
-  if (!refreshToken) return null;
   try {
+    // The refresh token lives in an httpOnly cookie set by the backend;
+    // credentials: 'include' sends it automatically. Never store it in
+    // localStorage (XSS-safe).
     const res = await fetch(`${API_URL}${API_PREFIX}/auth/refresh`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
-      body: JSON.stringify({ refreshToken }),
     });
     if (!res.ok) return null;
     const body = await res.json().catch(() => null);
     const data = body?.data ?? body;
     if (!data?.accessToken) return null;
     localStorage.setItem(ACCESS_TOKEN_KEY, data.accessToken);
-    // The backend rotates the refresh token; keep the new one.
-    if (data.refreshToken) localStorage.setItem(REFRESH_TOKEN_KEY, data.refreshToken);
     return data.accessToken;
   } catch {
     return null;

@@ -76,13 +76,13 @@ Configure these environment variables in your Render service settings:
 - `JWT_ACCESS_EXPIRES_IN` - JWT access token expiration (default: `30m`)
 - `JWT_EXPIRES_IN` - JWT refresh token expiration (default: `7d`)
 
-**Example for your deployment:**
+**Example for your deployment (placeholders only — never commit real credentials):**
 ```
-DATABASE_URL=postgresql://super_admin_83u7_user:i4YE5VJ38DSloMS19SQOW640Vx9hkGBC@dpg-da02vr9t0dsc738osjf0-a.oregon-postgres.render.com/super_admin_83u7?sslmode=require
-CRM_DATABASE_URL=postgresql://super_admin_83u7_user:i4YE5VJ38DSloMS19SQOW640Vx9hkGBC@dpg-da02vr9t0dsc738osjf0-a.oregon-postgres.render.com/super_admin_83u7?sslmode=require
-JWT_SECRET=your-strong-random-secret-key-here
-FRONTEND_URL=https://crm-super-admin-6v3vicp1v-shedx.vercel.app
-ALLOWED_ORIGINS=https://crm-super-admin-6v3vicp1v-shedx.vercel.app,https://crm-super-admin.onrender.com
+DATABASE_URL=postgresql://<user>:<password>@<host>:5432/<platform-db>?sslmode=require
+CRM_DATABASE_URL=postgresql://<user>:<password>@<host>:5432/<crm-db>?sslmode=require
+JWT_SECRET=<generate-a-random-secret-at-least-32-chars>
+FRONTEND_URL=https://super.example.com
+ALLOWED_ORIGINS=https://super.example.com
 ```
 
 ### Vercel Environment Variables Configuration

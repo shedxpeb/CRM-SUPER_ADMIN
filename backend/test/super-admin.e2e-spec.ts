@@ -10,8 +10,12 @@ import { GlobalValidationPipe } from '../src/common/pipes/validation.pipe';
 import { TransformInterceptor } from '../src/common/interceptors/transform.interceptor';
 import { LoggingInterceptor } from '../src/common/interceptors/logging.interceptor';
 
-const TEST_EMAIL = 'admin@pebcrm.com';
-const TEST_PASSWORD = 'Admin@123';
+const TEST_EMAIL = process.env.SUPER_ADMIN_EMAIL || 'admin@pebcrm.com';
+const TEST_PASSWORD =
+  process.env.SUPER_ADMIN_PASSWORD ||
+  (() => {
+    throw new Error('SUPER_ADMIN_PASSWORD env is required for e2e tests');
+  })();
 const FRONTEND_URL = 'http://localhost:3001';
 
 describe('Super Admin E2E', () => {

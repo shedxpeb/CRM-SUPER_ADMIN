@@ -3,10 +3,7 @@
 import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { getMe, login as apiLogin, logout as apiLogout } from '@/lib/api/auth';
-import {
-  ACCESS_TOKEN_KEY,
-  REFRESH_TOKEN_KEY,
-} from '@/lib/api';
+import { ACCESS_TOKEN_KEY } from '@/lib/api';
 import type { AuthUser } from '@/lib/types';
 
 interface AuthContextValue {
@@ -36,7 +33,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(data);
     } catch {
       localStorage.removeItem(ACCESS_TOKEN_KEY);
-      localStorage.removeItem(REFRESH_TOKEN_KEY);
       setUser(null);
     } finally {
       setIsLoading(false);
@@ -51,7 +47,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const data = await apiLogin(email, password);
       localStorage.setItem(ACCESS_TOKEN_KEY, data.accessToken);
-      if (data.refreshToken) localStorage.setItem(REFRESH_TOKEN_KEY, data.refreshToken);
       setUser(data.user);
       return { success: true };
     } catch (err: unknown) {
@@ -69,7 +64,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // ignore
     }
     localStorage.removeItem(ACCESS_TOKEN_KEY);
-    localStorage.removeItem(REFRESH_TOKEN_KEY);
     setUser(null);
     router.push('/login');
   }, [router]);

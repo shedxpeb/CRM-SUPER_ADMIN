@@ -16,15 +16,16 @@ describe('normalizeOrigin', () => {
 
 describe('parseAllowedOrigins', () => {
   it('splits on commas, trims, and drops empties', () => {
-    expect(
-      parseAllowedOrigins('http://localhost:3001,  https://a.vercel.app/ ,,'),
-    ).toEqual(['http://localhost:3001', 'https://a.vercel.app']);
+    expect(parseAllowedOrigins('http://localhost:3001,  https://a.vercel.app/ ,,')).toEqual([
+      'http://localhost:3001',
+      'https://a.vercel.app',
+    ]);
   });
 
   it('de-duplicates normalized origins', () => {
-    expect(
-      parseAllowedOrigins('https://x.vercel.app,https://x.vercel.app/'),
-    ).toEqual(['https://x.vercel.app']);
+    expect(parseAllowedOrigins('https://x.vercel.app,https://x.vercel.app/')).toEqual([
+      'https://x.vercel.app',
+    ]);
   });
 });
 
@@ -73,8 +74,8 @@ describe('isOriginAllowed', () => {
         allowVercelApp: true,
       }),
     ).toBe(false);
-    expect(
-      isOriginAllowed('https://evil-vercel.app', allowed, { allowVercelApp: true }),
-    ).toBe(false);
+    expect(isOriginAllowed('https://evil-vercel.app', allowed, { allowVercelApp: true })).toBe(
+      false,
+    );
   });
 });

@@ -67,8 +67,7 @@ export class TenantsService {
     // A row left behind by a failed CRM provisioning attempt (FAILED, never
     // linked) would otherwise block re-creating the same tenant forever with a
     // 409. Allow it to be reused and provisioned again.
-    const isReusableFailure =
-      existing?.syncState === 'FAILED' && !existing.crmOrganizationId;
+    const isReusableFailure = existing?.syncState === 'FAILED' && !existing.crmOrganizationId;
     if (existing && !isReusableFailure) {
       throw new ConflictException('A tenant with this slug already exists');
     }
@@ -346,10 +345,7 @@ export class TenantsService {
       // Enable default modules (canonical singular keys so the CRM guards
       // resolve them; platform keeps plural keys in modulesEnabled).
       const moduleKeys = Array.from(
-        new Set([
-          ...MODULE_CATALOG_KEYS.map((m) => normalizeModuleKey(m)),
-          ...CRM_DEFAULT_MODULES,
-        ]),
+        new Set([...MODULE_CATALOG_KEYS.map((m) => normalizeModuleKey(m)), ...CRM_DEFAULT_MODULES]),
       );
       for (const moduleKey of moduleKeys) {
         await crmTx.organizationModule.create({
