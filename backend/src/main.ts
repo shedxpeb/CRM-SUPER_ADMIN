@@ -3,6 +3,8 @@ import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import cors from '@fastify/cors';
 import cookie from '@fastify/cookie';
+import helmet from '@fastify/helmet';
+import compress from '@fastify/compress';
 import { randomUUID } from 'crypto';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppConfigService } from './config/app.config';
@@ -72,9 +74,25 @@ async function bootstrap() {
       (allowVercelPreview ? ' (+ any *.vercel.app)' : ''),
   );
 
-  await app.register(cookie, {
-    secret: config.jwtSecret || 'dev-cookie-secret',
+  // Security headers — matching ADMIN-CRM configuration
+  await app.register(helmet, {
+    contentSecurityPolicy: config.nodeEnv === 'production',
+    crossOriginEmbedderPolicy: false,
   });
+
+  // Compression — compress API responses with gzip/brotli
+  await app.register(compress, {
+    encodings: ['br', 'gzip', 'deflate'],
+    threshold: 1024,
+  });
+
+  await app.register(cookie, {
+    secret: config.cookieSecret || 'dev-cookie-secret',
+  });
+
+  // Graceful shutdown — allows NestJS to call OnModuleDestroy on
+  // PrismaService ($disconnect), RateLimitGuard (clearInterval), etc.
+  app.enableShutdownHooks();
 
   // Expose Swagger only outside production (internal API documentation must not be public).
   if (config.nodeEnv !== 'production') {

@@ -54,6 +54,10 @@ export class AppConfigService {
     return this.configService.get<string>('jwt.secret', '');
   }
 
+  get cookieSecret(): string {
+    return this.configService.get<string>('cookieSecret', '');
+  }
+
   get jwtAccessExpiresIn(): string {
     return this.configService.get<string>('jwt.accessExpiresIn', '30m');
   }

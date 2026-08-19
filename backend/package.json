@@ -34,8 +34,10 @@
     "seed": "ts-node prisma/seed.ts"
   },
   "dependencies": {
+    "@fastify/compress": "^9.2.0",
     "@fastify/cookie": "^11.0.2",
     "@fastify/cors": "^11.2.0",
+    "@fastify/helmet": "^13.1.0",
     "@fastify/static": "^8.3.0",
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.0",

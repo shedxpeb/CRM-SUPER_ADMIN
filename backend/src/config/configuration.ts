@@ -4,6 +4,7 @@ export default () => ({
   port: parseInt(process.env.PORT || '8001', 10),
   globalPrefix: process.env.API_PREFIX || 'api/v1',
   frontendUrl: process.env.FRONTEND_URL || 'http://localhost:3001',
+  cookieSecret: process.env.COOKIE_SECRET || '',
   database: {
     url: process.env.DATABASE_URL,
   },

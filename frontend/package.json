@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "next dev --port 3001",
     "build": "next build",
-    "start": "next start --port 3001",
+    "start": "next start -p ${PORT:-3001}",
     "lint": "eslint .",
     "type-check": "tsc --noEmit"
   },
@@ -32,6 +32,7 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.6",
+    "@next/bundle-analyzer": "^16.3.1",
     "@playwright/test": "^1.61.1",
     "@tailwindcss/postcss": "^4.0.0",
     "@types/node": "^22.0.0",
