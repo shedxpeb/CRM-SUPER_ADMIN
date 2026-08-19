@@ -79,7 +79,9 @@ export class RateLimitGuard implements CanActivate, OnModuleDestroy {
       }
     }
     if (purged > 0) {
-      this.logger.debug(`Rate limiter cleanup: purged ${purged} expired entries, ${this.windows.size} active`);
+      this.logger.debug(
+        `Rate limiter cleanup: purged ${purged} expired entries, ${this.windows.size} active`,
+      );
     }
   }
 
