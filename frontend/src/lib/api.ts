@@ -5,7 +5,7 @@ export const ACCESS_TOKEN_KEY = 'sa_access_token';
 // Fail fast instead of silently pointing the production bundle at localhost.
 if (!API_URL) {
   throw new Error(
-    'Missing required environment variable: NEXT_PUBLIC_API_URL (e.g. https://api.example.com/api/v1)',
+    'Missing required environment variable: NEXT_PUBLIC_API_URL (e.g. https://api-admin.buildxcrm.com/api/v1)',
   );
 }
 

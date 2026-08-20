@@ -198,7 +198,7 @@ export class TenantsService {
       const crmBaseUrl =
         this.config?.get<string>('crm.baseUrl') ||
         process.env.CRM_BASE_URL ||
-        'https://app.pebcrm.com';
+        'https://buildxcrm.com';
       await this.mailService.sendTenantAdminWelcome({
         to: adminUserEmail,
         tenantName: tenant.name,
