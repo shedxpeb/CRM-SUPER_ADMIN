@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
-import { Prisma as PrismaCrm, SystemRole as CrmSystemRole } from '@prisma/client-crm';
+import { Prisma as PrismaCrm, CrmUserRole } from '@prisma/client-crm';
 import { PrismaService } from '../../database/prisma.service';
 import { CrmPrismaService } from '../../database/crm-prisma.service';
 import { AuditService } from '../auth/services/audit.service';
@@ -28,6 +28,20 @@ import {
 } from './dto/tenant-crm.dto';
 
 const DEFAULT_CRM_ROLE = 'EMPLOYEE';
+
+const toCrmUserRole = (roleCode?: string): CrmUserRole => {
+  switch ((roleCode ?? DEFAULT_CRM_ROLE).toUpperCase()) {
+    case 'SUPER_ADMIN':
+      return CrmUserRole.SUPER_ADMIN;
+    case 'OWNER':
+    case 'COMPANY_OWNER':
+      return CrmUserRole.OWNER;
+    case 'ADMIN':
+      return CrmUserRole.ADMIN;
+    default:
+      return CrmUserRole.EMPLOYEE;
+  }
+};
 
 async function ensureTenant(
   prisma: PrismaService,
@@ -391,7 +405,7 @@ export class TenantOpsService {
         mobile: dto.mobile,
         department: dto.department,
         designation: dto.designation,
-        role: roleCode as CrmSystemRole,
+        role: toCrmUserRole(roleCode),
         organizationId: tenant.crmOrganizationId,
         password: await bcrypt.hash(password, 10),
         isActive: dto.isActive ?? true,
@@ -420,7 +434,7 @@ export class TenantOpsService {
       },
     });
     if (systemRole) {
-      await this.crmPrisma.userRole.create({
+      await this.crmPrisma.userRoleAssignment.create({
         data: {
           userId: user.id,
           roleId: systemRole.id,
@@ -632,7 +646,7 @@ export class TenantOpsService {
     });
     if (!user) throw new NotFoundException('Tenant user not found');
 
-    const assignments = await this.crmPrisma.userRole.findMany({
+    const assignments = await this.crmPrisma.userRoleAssignment.findMany({
       where: { userId, organizationId: tenant.crmOrganizationId },
       include: { role: { select: { id: true, name: true, code: true } } },
     });
@@ -662,10 +676,10 @@ export class TenantOpsService {
     if (!role) throw new NotFoundException('Role not found');
 
     await this.crmPrisma.$transaction([
-      this.crmPrisma.userRole.deleteMany({
+      this.crmPrisma.userRoleAssignment.deleteMany({
         where: { userId, organizationId: tenant.crmOrganizationId },
       }),
-      this.crmPrisma.userRole.create({
+      this.crmPrisma.userRoleAssignment.create({
         data: {
           userId,
           roleId: role.id,
@@ -676,7 +690,7 @@ export class TenantOpsService {
       this.crmPrisma.user.update({
         where: { id: userId },
         data: role.code
-          ? { role: role.code as CrmSystemRole, version: { increment: 1 } }
+          ? { role: toCrmUserRole(role.code), version: { increment: 1 } }
           : { version: { increment: 1 } },
       }),
     ]);
@@ -707,12 +721,12 @@ export class TenantOpsService {
     if (!user) throw new NotFoundException('Tenant user not found');
 
     await this.crmPrisma.$transaction([
-      this.crmPrisma.userRole.deleteMany({
+      this.crmPrisma.userRoleAssignment.deleteMany({
         where: { userId, organizationId: tenant.crmOrganizationId },
       }),
       this.crmPrisma.user.update({
         where: { id: userId },
-        data: { role: DEFAULT_CRM_ROLE, version: { increment: 1 } },
+        data: { role: DEFAULT_CRM_ROLE as CrmUserRole, version: { increment: 1 } },
       }),
     ]);
 
@@ -935,7 +949,7 @@ export class TenantOpsService {
       where: { id: roleId, organizationId: tenant.crmOrganizationId, isDeleted: false },
     });
     if (!role) throw new NotFoundException('Role not found');
-    const memberCount = await this.crmPrisma.userRole.count({
+    const memberCount = await this.crmPrisma.userRoleAssignment.count({
       where: { roleId, organizationId: tenant.crmOrganizationId },
     });
     return { ...role, memberCount };
@@ -1031,7 +1045,7 @@ export class TenantOpsService {
     if (role.isSystem) throw new BadRequestException('System roles cannot be deleted');
 
     // Validation: Check for users assigned to this role
-    const userCount = await this.crmPrisma.userRole.count({
+    const userCount = await this.crmPrisma.userRoleAssignment.count({
       where: { roleId, organizationId: tenant.crmOrganizationId },
     });
 
@@ -1046,7 +1060,7 @@ export class TenantOpsService {
         where: { id: roleId },
         data: { isDeleted: true, deletedAt: new Date(), deletedById: actor.id },
       }),
-      this.crmPrisma.userRole.deleteMany({
+      this.crmPrisma.userRoleAssignment.deleteMany({
         where: { roleId, organizationId: tenant.crmOrganizationId },
       }),
     ]);
@@ -1125,7 +1139,7 @@ export class TenantOpsService {
     // Invalidate the CRM per-user effective-permission cache for everyone with
     // this role so the new permissions take effect immediately (the CRM's
     // PermissionInheritanceService otherwise serves cached permissions for 5 min).
-    const affectedUsers = await this.crmPrisma.userRole.findMany({
+    const affectedUsers = await this.crmPrisma.userRoleAssignment.findMany({
       where: { roleId, organizationId: tenant.crmOrganizationId },
       select: { userId: true },
     });

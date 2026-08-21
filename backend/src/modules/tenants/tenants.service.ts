@@ -389,7 +389,7 @@ export class TenantsService {
       // permissions (the CRM resolves effective permissions via UserRole).
       const adminRole = createdRoles.find((r) => r.code === 'ADMIN');
       if (adminRole) {
-        await crmTx.userRole.create({
+        await crmTx.userRoleAssignment.create({
           data: {
             userId: adminUser.id,
             roleId: adminRole.id,
