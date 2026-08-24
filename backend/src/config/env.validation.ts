@@ -1,15 +1,24 @@
-export function validateEnv(): void {
+export function validateEnv(config: any): void {
   const isProd = process.env.NODE_ENV === 'production';
   const missing: string[] = [];
 
   const requireVar = (name: string) => {
-    if (!process.env[name]?.trim()) missing.push(name);
+    const value = config[name] || process.env[name];
+    if (!value || (typeof value === 'string' && !value.trim())) missing.push(name);
   };
 
-  requireVar('DATABASE_URL');
-  requireVar('JWT_SECRET');
-  requireVar('COOKIE_SECRET');
-  requireVar('PORT');
+  // Only require these in production
+  if (isProd) {
+    requireVar('DATABASE_URL');
+    requireVar('JWT_SECRET');
+    requireVar('COOKIE_SECRET');
+    requireVar('PORT');
+  }
+
+  // In development, skip validation - use defaults
+  if (!isProd) {
+    return;
+  }
 
   if (isProd) {
     const weakSecrets = [
@@ -23,19 +32,21 @@ export function validateEnv(): void {
     ];
 
     // JWT_SECRET must be strong in production
+    const jwtSecret = config.jwt?.secret || process.env.JWT_SECRET;
     if (
-      !process.env.JWT_SECRET ||
-      process.env.JWT_SECRET.length < 32 ||
-      weakSecrets.includes(process.env.JWT_SECRET)
+      !jwtSecret ||
+      jwtSecret.length < 32 ||
+      weakSecrets.includes(jwtSecret)
     ) {
       throw new Error('JWT_SECRET must be a strong secret of at least 32 characters in production');
     }
 
     // COOKIE_SECRET must be a dedicated strong secret — not a fallback to JWT_SECRET
+    const cookieSecret = config.cookieSecret || process.env.COOKIE_SECRET;
     if (
-      !process.env.COOKIE_SECRET ||
-      process.env.COOKIE_SECRET.length < 32 ||
-      weakSecrets.includes(process.env.COOKIE_SECRET)
+      !cookieSecret ||
+      cookieSecret.length < 32 ||
+      weakSecrets.includes(cookieSecret)
     ) {
       throw new Error(
         'COOKIE_SECRET must be a dedicated strong secret of at least 32 characters in production. ' +
@@ -44,7 +55,7 @@ export function validateEnv(): void {
     }
 
     // FRONTEND_URL must not point to localhost in production
-    const frontendUrl = process.env.FRONTEND_URL || '';
+    const frontendUrl = config.frontendUrl || process.env.FRONTEND_URL || '';
     if (/localhost|127\.0\.0\.1/i.test(frontendUrl)) {
       throw new Error('FRONTEND_URL must not point to localhost in production');
     }

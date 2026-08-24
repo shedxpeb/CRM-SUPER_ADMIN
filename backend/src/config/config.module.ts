@@ -20,18 +20,19 @@ const logger = new Logger('ConfigModule');
   imports: [
     NestConfigModule.forRoot({
       isGlobal: true,
-      // Production reads .env.production only; development uses .env.
-      envFilePath:
-        process.env.NODE_ENV === 'production' ? ['.env.production', 'production.env'] : ['.env'],
+      envFilePath: ['.env', '.env.local'],
       load: [configuration],
       validate: (config) => {
         try {
-          validateEnv();
+          validateEnv(config);
           logger.log('Environment validation passed');
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           logger.error(`Environment validation failed: ${message}`);
-          process.exit(1);
+          // Don't exit in development to allow debugging
+          if (process.env.NODE_ENV === 'production') {
+            process.exit(1);
+          }
         }
         return { ...config, ...configuration() };
       },
