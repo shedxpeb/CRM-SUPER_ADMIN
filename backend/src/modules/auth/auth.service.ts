@@ -168,6 +168,7 @@ export class AuthService {
     userAgent?: string,
   ): Promise<AuthResponse> {
     const tokenHash = this.tokenService.hashToken(refreshToken);
+
     const stored = await this.prisma.refreshToken.findUnique({
       where: { tokenHash },
       include: { session: true, user: true },
@@ -177,29 +178,63 @@ export class AuthService {
     if (stored.expiresAt < new Date()) throw new UnauthorizedException('Refresh token expired');
     if (!stored.session.isActive) throw new UnauthorizedException('Session is inactive');
 
+    // Acquire real Postgres row-level lock
+    await this.prisma.$queryRaw`SELECT 1 FROM "RefreshToken" WHERE "tokenHash" = ${tokenHash} FOR UPDATE`;
+    this.logger.log(`REFRESH_LOCK_ACQUIRED: tokenHash=${tokenHash.substring(0, 8)}...`);
+
+    // Re-fetch after lock
+    const fresh = await this.prisma.refreshToken.findUnique({
+      where: { tokenHash: stored.tokenHash },
+      include: { session: true, user: true },
+    });
+
+    if (!fresh || fresh.isRevoked || fresh.expiresAt < new Date() || fresh.session.expiresAt < new Date()) {
+      this.logger.warn(`REFRESH_REUSE_REJECTED: token invalid after lock`);
+      throw new UnauthorizedException('Session has expired or been revoked');
+    }
+
+    this.logger.log(`REFRESH_ROTATED: rotating active token`);
+    return this.rotateRefresh(fresh, ipAddress, userAgent);
+  }
+
+  private async rotateRefresh(
+    storedToken: {
+      id: string;
+      sessionId: string;
+      userId: string;
+      organizationId?: string | null;
+      session: { isActive: boolean };
+      user: {
+        id: string;
+        email: string;
+        passwordVersion: number;
+        permissionVersion: number;
+      };
+    },
+    ipAddress?: string,
+    userAgent?: string,
+  ): Promise<AuthResponse> {
     const newRefresh = this.tokenService.generateRefreshToken();
     const newExpiry = addDays(new Date(), 7);
 
-    await this.prisma.$transaction([
-      this.prisma.refreshToken.update({
-        where: { id: stored.id },
-        data: { isRevoked: true, revokedAt: new Date(), replacedByTokenHash: newRefresh.hash },
-      }),
-      this.prisma.refreshToken.create({
-        data: {
-          tokenHash: newRefresh.hash,
-          sessionId: stored.sessionId,
-          userId: stored.userId,
-          expiresAt: newExpiry,
-        },
-      }),
-      this.prisma.platformSession.update({
-        where: { id: stored.sessionId },
-        data: { refreshToken: newRefresh.hash, lastActivityAt: new Date() },
-      }),
-    ]);
+    await this.prisma.refreshToken.update({
+      where: { id: storedToken.id },
+      data: { isRevoked: true, revokedAt: new Date(), replacedByTokenHash: newRefresh.hash },
+    });
+    await this.prisma.refreshToken.create({
+      data: {
+        tokenHash: newRefresh.hash,
+        sessionId: storedToken.sessionId,
+        userId: storedToken.userId,
+        expiresAt: newExpiry,
+      },
+    });
+    await this.prisma.platformSession.update({
+      where: { id: storedToken.sessionId },
+      data: { refreshToken: newRefresh.hash, lastActivityAt: new Date() },
+    });
 
-    const user = stored.user;
+    const user = storedToken.user;
 
     await this.auditService.record({
       actorId: user.id,
@@ -207,18 +242,18 @@ export class AuthService {
       action: 'auth.refresh',
       ipAddress,
       userAgent,
-      metadata: { sessionId: stored.sessionId },
+      metadata: { sessionId: storedToken.sessionId },
     });
 
-    const authUser = await this.buildAuthUser(user.id, user.email, user.name);
+    const authUser = await this.buildAuthUser(user.id, user.email, user.email);
     return this.buildResponse(
       authUser,
-      stored.sessionId,
+      storedToken.sessionId,
       newRefresh.token,
       this.tokenService.signAccessToken({
         sub: user.id,
         email: user.email,
-        sessionId: stored.sessionId,
+        sessionId: storedToken.sessionId,
         passwordVersion: user.passwordVersion,
         permissionVersion: user.permissionVersion,
       }),
@@ -254,9 +289,7 @@ export class AuthService {
       },
     });
     if (!user) throw new UnauthorizedException('User not found');
-    // Return the same flat contract as login (roles: string[], permissions:
-    // string[]) so client-side guards (hasRole/can) work after hard reloads.
-    const profile = await this.buildAuthUser(user.id, user.email, user.name);
+    const profile = await this.buildAuthUser(user.id, user.email, user.email);
     return { ...user, roles: profile.roles, permissions: profile.permissions };
   }
 
@@ -302,7 +335,6 @@ export class AuthService {
     const user = await this.prisma.platformUser.findUnique({
       where: { email: dto.email.toLowerCase() },
     });
-    // Always return success to avoid user enumeration.
     if (!user) return { message: 'If the account exists, a reset link has been sent.' };
 
     const token = this.tokenService.signPasswordResetToken({
@@ -318,7 +350,6 @@ export class AuthService {
       ipAddress,
     });
 
-    // Email delivery is wired to the mail provider in production; log the link in dev.
     this.logger.log(`Password reset link for ${user.email}: ${token}`);
 
     return { message: 'If the account exists, a reset link has been sent.' };
@@ -375,11 +406,11 @@ export class AuthService {
     const permissions = roleNames.includes('SUPER_ADMIN')
       ? ['*']
       : (
-          await this.prisma.rolePermission.findMany({
-            where: { role: { users: { some: { userId } } } },
-            select: { permission: { select: { key: true } } },
-          })
-        ).map((r) => r.permission.key);
+        await this.prisma.rolePermission.findMany({
+          where: { role: { users: { some: { userId } } } },
+          select: { permission: { select: { key: true } } },
+        })
+      ).map((r) => r.permission.key);
     return { id: userId, email, name, roles: roleNames, permissions };
   }
 

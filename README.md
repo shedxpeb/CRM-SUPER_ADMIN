@@ -4,7 +4,7 @@ Enterprise control plane for the PEB CRM ecosystem: platform administration, ten
 
 ## Deployment Status
 
-Replace `OWNER/REPO` below with your GitHub organization and repository name (e.g. `acme/peb-crm`).
+Replace `OWNER/REPO` below with your GitHub organization and repository name (e.g. `acme/BuildX`).
 
 | App | Platform | Status |
 | --- | --- | --- |

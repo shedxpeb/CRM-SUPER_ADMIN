@@ -37,7 +37,7 @@ export class PlatformService {
     const updated = await this.prisma.platformSetting.update({
       where: { key },
       data: {
-        value: dto.value as Prisma.InputJsonValue,
+        value: dto.value as any,
         description: dto.description,
         updatedById: actor.id,
       },

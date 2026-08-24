@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { Prisma, TenantStatus } from '@prisma/client';
+import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../database/prisma.service';
 import { CrmPrismaService } from '../../database/crm-prisma.service';
@@ -60,6 +61,10 @@ export class TenantsService {
     private readonly mailService: MailService,
     private readonly config: ConfigService,
   ) {}
+
+  private get crm() {
+    return this.crmPrisma as any;
+  }
 
   async create(dto: CreateTenantDto, actor: { id: string; email: string }) {
     const slug = dto.slug.trim().toLowerCase();
@@ -310,7 +315,7 @@ export class TenantsService {
     },
     opts: { initialPassword?: string } = {},
   ): Promise<{ crmOrgId: string; passwordSet: boolean }> {
-    return this.crmPrisma.$transaction(async (crmTx) => {
+    return this.crm.$transaction(async (crmTx) => {
       const crmOrg = await crmTx.organization.create({
         data: {
           name: tenant.name,
@@ -456,7 +461,7 @@ export class TenantsService {
   private async resolveUserCounts(organizationIds: string[]): Promise<Map<string, number>> {
     const counts = new Map<string, number>();
     if (organizationIds.length === 0) return counts;
-    const rows = await this.crmPrisma.user.groupBy({
+    const rows = await this.crm.user.groupBy({
       by: ['organizationId'],
       where: { organizationId: { in: organizationIds }, isDeleted: false },
       _count: { _all: true },
@@ -499,7 +504,7 @@ export class TenantsService {
         select: TENANT_SELECT,
       });
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
+      if (error instanceof PrismaClientKnownRequestError && error.code === 'P2025') {
         throw new ConflictException('Tenant was modified by another request. Refresh and retry.');
       }
       throw error;
@@ -598,7 +603,7 @@ export class TenantsService {
         select: TENANT_SELECT,
       });
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
+      if (error instanceof PrismaClientKnownRequestError && error.code === 'P2025') {
         throw new ConflictException('Tenant was modified by another request. Refresh and retry.');
       }
       throw error;
@@ -607,7 +612,7 @@ export class TenantsService {
     // Step 2: Update CRM Organization status via crmPrisma (compensating transaction)
     if (updated.crmOrganizationId) {
       try {
-        await this.crmPrisma.$transaction(async (crmTx) => {
+        await this.crm.$transaction(async (crmTx) => {
           // Update CRM Organization status to Suspended
           await crmTx.organization.update({
             where: { id: updated.crmOrganizationId },
@@ -683,7 +688,7 @@ export class TenantsService {
         select: TENANT_SELECT,
       });
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
+      if (error instanceof PrismaClientKnownRequestError && error.code === 'P2025') {
         throw new ConflictException('Tenant was modified by another request. Refresh and retry.');
       }
       throw new BadRequestException('Failed to update tenant status');
@@ -692,7 +697,7 @@ export class TenantsService {
     // Step 2: Update CRM Organization status via crmPrisma (compensating transaction)
     if (updated.crmOrganizationId) {
       try {
-        await this.crmPrisma.$transaction(async (crmTx) => {
+        await this.crm.$transaction(async (crmTx) => {
           // Update CRM Organization status to Active
           await crmTx.organization.update({
             where: { id: updated.crmOrganizationId },

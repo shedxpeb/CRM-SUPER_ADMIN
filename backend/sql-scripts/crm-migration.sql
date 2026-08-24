@@ -1,6 +1,6 @@
 -- CRM Database Migration Script
--- This script should be run against the peb-crm database
--- Usage: psql -h 127.0.0.1 -p 5432 -U postgres -d peb-crm -f crm-migration.sql
+-- This script should be run against the BuildX database
+-- Usage: psql -h 127.0.0.1 -p 5432 -U postgres -d BuildX -f crm-migration.sql
 
 -- ============================================================================
 -- 1. Create Organization Table in CRM Database

@@ -1,11 +1,11 @@
 import { Injectable, NestInterceptor, ExecutionContext, CallHandler } from '@nestjs/common';
+import { ConfigService as NestConfigService } from '@nestjs/config';
 import { Observable, map } from 'rxjs';
-import type { FastifyReply } from 'fastify';
-import { AppConfigService } from '../../config/app.config';
+import { FastifyReply } from 'fastify';
 
 @Injectable()
 export class AuthCookieInterceptor implements NestInterceptor {
-  constructor(private readonly config: AppConfigService) {}
+  constructor(private readonly config: NestConfigService) {}
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
     const res = context.switchToHttp().getResponse<FastifyReply>();
@@ -15,7 +15,7 @@ export class AuthCookieInterceptor implements NestInterceptor {
     const secure =
       process.env.COOKIE_SECURE !== undefined
         ? process.env.COOKIE_SECURE === 'true'
-        : this.config.isProduction;
+        : process.env.NODE_ENV === 'production';
 
     return next.handle().pipe(
       map((data: Record<string, unknown>) => {

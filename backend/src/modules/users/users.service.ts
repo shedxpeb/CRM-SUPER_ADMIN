@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { Prisma } from '@prisma/client';
+import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { PrismaService } from '../../database/prisma.service';
 import { CrmPrismaService } from '../../database/crm-prisma.service';
 import { AppConfigService } from '../../config/app.config';
@@ -42,6 +43,10 @@ export class UsersService {
     private readonly auditService: AuditService,
     private readonly tenantsService: TenantsService,
   ) {}
+
+  private get crm() {
+    return this.crmPrisma as any;
+  }
 
   /**
    * NOTE: Platform Users and CRM Users are SEPARATE entities.
@@ -168,7 +173,7 @@ export class UsersService {
     }
 
     const [items, total] = await Promise.all([
-      this.crmPrisma.user.findMany({
+      this.crm.user.findMany({
         where,
         skip,
         take,
@@ -189,7 +194,7 @@ export class UsersService {
           updatedAt: true,
         },
       }),
-      this.crmPrisma.user.count({ where }),
+      this.crm.user.count({ where }),
     ]);
 
     return {
@@ -264,7 +269,7 @@ export class UsersService {
         select: USER_SELECT,
       });
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
+      if (error instanceof PrismaClientKnownRequestError && error.code === 'P2025') {
         throw new ConflictException('User was modified by another request. Refresh and retry.');
       }
       throw error;

@@ -66,6 +66,10 @@ export class AppConfigService {
     return this.configService.get<string>('jwt.refreshExpiresIn', '7d');
   }
 
+  get refreshReuseGraceMs(): number {
+    return this.configService.get<number>('refreshReuseGraceMs', 300000);
+  }
+
   get bcryptRounds(): number {
     return this.configService.get<number>('security.bcryptRounds', 12);
   }

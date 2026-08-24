@@ -76,6 +76,10 @@ export class TenantOpsService {
     private readonly auditService: AuditService,
   ) {}
 
+  private get crm() {
+    return this.crmPrisma as any;
+  }
+
   // ── Activity / Modules ──────────────────────────────────────────────────────
 
   async getActivity(tenantId: string, dto: PaginationDto) {
@@ -174,7 +178,7 @@ export class TenantOpsService {
       // Step 2: Update CRM OrganizationModule via crmPrisma (compensating transaction)
       if (tenant.crmOrganizationId) {
         try {
-          await this.crmPrisma.$transaction(async (crmTx) => {
+          await this.crm.$transaction(async (crmTx) => {
             // CRM canonicalizes module keys to singular form (matches permission prefix)
             const crmUpdates = Object.entries(modules).map(([moduleKey, enabled]) => {
               const crmModuleKey = normalizeModuleKey(moduleKey);
@@ -328,7 +332,7 @@ export class TenantOpsService {
     }
 
     const [items, total] = await Promise.all([
-      this.crmPrisma.user.findMany({
+      this.crm.user.findMany({
         where,
         skip,
         take,
@@ -349,7 +353,7 @@ export class TenantOpsService {
           updatedAt: true,
         },
       }),
-      this.crmPrisma.user.count({ where }),
+      this.crm.user.count({ where }),
     ]);
 
     return { items, meta: buildPageMeta(page, take, total, undefined) };
@@ -358,7 +362,7 @@ export class TenantOpsService {
   async getTenantUser(tenantId: string, userId: string) {
     const tenant = await ensureTenantLoose(this.prisma, tenantId);
     if (!tenant.crmOrganizationId) throw new NotFoundException('Tenant user not found');
-    const user = await this.crmPrisma.user.findFirst({
+    const user = await this.crm.user.findFirst({
       where: { id: userId, organizationId: tenant.crmOrganizationId, isDeleted: false },
       select: {
         id: true,
@@ -387,7 +391,7 @@ export class TenantOpsService {
   ) {
     const tenant = await ensureTenant(this.prisma, tenantId);
 
-    const existing = await this.crmPrisma.user.findFirst({
+    const existing = await this.crm.user.findFirst({
       where: { email: dto.email, isDeleted: false },
     });
     if (existing) throw new ConflictException('A user with this email already exists');
@@ -398,7 +402,7 @@ export class TenantOpsService {
     // own password through the CRM OTP (forgot-password) flow.
     const password = dto.password ?? crypto.randomUUID();
 
-    const user = await this.crmPrisma.user.create({
+    const user = await this.crm.user.create({
       data: {
         email: dto.email.toLowerCase().trim(),
         name: dto.name,
@@ -425,7 +429,7 @@ export class TenantOpsService {
 
     // Link the user to the matching system role so the CRM RBAC resolver
     // (which reads effective permissions via UserRole) grants access.
-    const systemRole = await this.crmPrisma.role.findFirst({
+    const systemRole = await this.crm.role.findFirst({
       where: {
         organizationId: tenant.crmOrganizationId,
         code: roleCode,
@@ -434,7 +438,7 @@ export class TenantOpsService {
       },
     });
     if (systemRole) {
-      await this.crmPrisma.userRoleAssignment.create({
+      await this.crm.userRoleAssignment.create({
         data: {
           userId: user.id,
           roleId: systemRole.id,
@@ -466,12 +470,12 @@ export class TenantOpsService {
     actor: { id: string; email: string },
   ) {
     const tenant = await ensureTenant(this.prisma, tenantId);
-    const user = await this.crmPrisma.user.findFirst({
+    const user = await this.crm.user.findFirst({
       where: { id: userId, organizationId: tenant.crmOrganizationId, isDeleted: false },
     });
     if (!user) throw new NotFoundException('Tenant user not found');
 
-    const updated = await this.crmPrisma.user.update({
+    const updated = await this.crm.user.update({
       where: { id: userId },
       data: {
         name: dto.name,
@@ -514,12 +518,12 @@ export class TenantOpsService {
     actor: { id: string; email: string },
   ) {
     const tenant = await ensureTenant(this.prisma, tenantId);
-    const user = await this.crmPrisma.user.findFirst({
+    const user = await this.crm.user.findFirst({
       where: { id: userId, organizationId: tenant.crmOrganizationId, isDeleted: false },
     });
     if (!user) throw new NotFoundException('Tenant user not found');
 
-    const updated = await this.crmPrisma.user.update({
+    const updated = await this.crm.user.update({
       where: { id: userId },
       data: {
         isActive: dto.isActive,
@@ -550,7 +554,7 @@ export class TenantOpsService {
     actor: { id: string; email: string },
   ) {
     const tenant = await ensureTenant(this.prisma, tenantId);
-    const user = await this.crmPrisma.user.findFirst({
+    const user = await this.crm.user.findFirst({
       where: { id: userId, organizationId: tenant.crmOrganizationId, isDeleted: false },
     });
     if (!user) throw new NotFoundException('Tenant user not found');
@@ -561,7 +565,7 @@ export class TenantOpsService {
     // through the CRM OTP (forgot-password) flow.
     const newPassword = dto?.newPassword ?? crypto.randomUUID();
 
-    await this.crmPrisma.user.update({
+    await this.crm.user.update({
       where: { id: userId },
       data: {
         password: await bcrypt.hash(newPassword, 10),
@@ -603,21 +607,21 @@ export class TenantOpsService {
     actor: { id: string; email: string },
   ) {
     const tenant = await ensureTenant(this.prisma, tenantId);
-    const user = await this.crmPrisma.user.findFirst({
+    const user = await this.crm.user.findFirst({
       where: { id: userId, organizationId: tenant.crmOrganizationId, isDeleted: false },
     });
     if (!user) throw new NotFoundException('Tenant user not found');
 
-    await this.crmPrisma.$transaction([
-      this.crmPrisma.user.update({
+    await this.crm.$transaction([
+      this.crm.user.update({
         where: { id: userId },
         data: { version: { increment: 1 } },
       }),
-      this.crmPrisma.session.updateMany({
+      this.crm.session.updateMany({
         where: { userId, isRevoked: false },
         data: { isRevoked: true, revokedAt: new Date() },
       }),
-      this.crmPrisma.refreshToken.updateMany({
+      this.crm.refreshToken.updateMany({
         where: { userId, isRevoked: false },
         data: { isRevoked: true, revokedAt: new Date() },
       }),
@@ -640,13 +644,13 @@ export class TenantOpsService {
   async getTenantUserRoles(tenantId: string, userId: string) {
     const tenant = await ensureTenantLoose(this.prisma, tenantId);
     if (!tenant.crmOrganizationId) throw new NotFoundException('Tenant user not found');
-    const user = await this.crmPrisma.user.findFirst({
+    const user = await this.crm.user.findFirst({
       where: { id: userId, organizationId: tenant.crmOrganizationId, isDeleted: false },
       select: { id: true, email: true },
     });
     if (!user) throw new NotFoundException('Tenant user not found');
 
-    const assignments = await this.crmPrisma.userRoleAssignment.findMany({
+    const assignments = await this.crm.userRoleAssignment.findMany({
       where: { userId, organizationId: tenant.crmOrganizationId },
       include: { role: { select: { id: true, name: true, code: true } } },
     });
@@ -665,21 +669,21 @@ export class TenantOpsService {
     actor: { id: string; email: string },
   ) {
     const tenant = await ensureTenant(this.prisma, tenantId);
-    const user = await this.crmPrisma.user.findFirst({
+    const user = await this.crm.user.findFirst({
       where: { id: userId, organizationId: tenant.crmOrganizationId, isDeleted: false },
     });
     if (!user) throw new NotFoundException('Tenant user not found');
 
-    const role = await this.crmPrisma.role.findFirst({
+    const role = await this.crm.role.findFirst({
       where: { id: dto.roleId, organizationId: tenant.crmOrganizationId, isDeleted: false },
     });
     if (!role) throw new NotFoundException('Role not found');
 
-    await this.crmPrisma.$transaction([
-      this.crmPrisma.userRoleAssignment.deleteMany({
+    await this.crm.$transaction([
+      this.crm.userRoleAssignment.deleteMany({
         where: { userId, organizationId: tenant.crmOrganizationId },
       }),
-      this.crmPrisma.userRoleAssignment.create({
+      this.crm.userRoleAssignment.create({
         data: {
           userId,
           roleId: role.id,
@@ -687,7 +691,7 @@ export class TenantOpsService {
           assignedById: actor.id,
         },
       }),
-      this.crmPrisma.user.update({
+      this.crm.user.update({
         where: { id: userId },
         data: role.code
           ? { role: toCrmUserRole(role.code), version: { increment: 1 } }
@@ -715,16 +719,16 @@ export class TenantOpsService {
     actor: { id: string; email: string },
   ) {
     const tenant = await ensureTenant(this.prisma, tenantId);
-    const user = await this.crmPrisma.user.findFirst({
+    const user = await this.crm.user.findFirst({
       where: { id: userId, organizationId: tenant.crmOrganizationId, isDeleted: false },
     });
     if (!user) throw new NotFoundException('Tenant user not found');
 
-    await this.crmPrisma.$transaction([
-      this.crmPrisma.userRoleAssignment.deleteMany({
+    await this.crm.$transaction([
+      this.crm.userRoleAssignment.deleteMany({
         where: { userId, organizationId: tenant.crmOrganizationId },
       }),
-      this.crmPrisma.user.update({
+      this.crm.user.update({
         where: { id: userId },
         data: { role: DEFAULT_CRM_ROLE as CrmUserRole, version: { increment: 1 } },
       }),
@@ -748,13 +752,13 @@ export class TenantOpsService {
   async getTenantUserPermissions(tenantId: string, userId: string) {
     const tenant = await ensureTenantLoose(this.prisma, tenantId);
     if (!tenant.crmOrganizationId) throw new NotFoundException('Tenant user not found');
-    const user = await this.crmPrisma.user.findFirst({
+    const user = await this.crm.user.findFirst({
       where: { id: userId, organizationId: tenant.crmOrganizationId, isDeleted: false },
       select: { id: true, email: true },
     });
     if (!user) throw new NotFoundException('Tenant user not found');
 
-    const overrides = await this.crmPrisma.userPermission.findMany({
+    const overrides = await this.crm.userPermission.findMany({
       where: { userId, organizationId: tenant.crmOrganizationId },
       select: { permissionKey: true, granted: true },
     });
@@ -774,7 +778,7 @@ export class TenantOpsService {
     actor: { id: string; email: string },
   ) {
     const tenant = await ensureTenant(this.prisma, tenantId);
-    const user = await this.crmPrisma.user.findFirst({
+    const user = await this.crm.user.findFirst({
       where: { id: userId, organizationId: tenant.crmOrganizationId, isDeleted: false },
       select: { id: true, email: true },
     });
@@ -785,7 +789,7 @@ export class TenantOpsService {
       ...dto.denied.map((key) => ({ permissionKey: key, granted: false })),
     ];
 
-    await this.crmPrisma.$transaction(async (tx) => {
+    await this.crm.$transaction(async (tx) => {
       await tx.userPermission.deleteMany({
         where: { userId, organizationId: tenant.crmOrganizationId },
       });
@@ -835,13 +839,13 @@ export class TenantOpsService {
   async getTenantUserModules(tenantId: string, userId: string) {
     const tenant = await ensureTenantLoose(this.prisma, tenantId);
     if (!tenant.crmOrganizationId) throw new NotFoundException('Tenant user not found');
-    const user = await this.crmPrisma.user.findFirst({
+    const user = await this.crm.user.findFirst({
       where: { id: userId, organizationId: tenant.crmOrganizationId, isDeleted: false },
       select: { id: true, email: true },
     });
     if (!user) throw new NotFoundException('Tenant user not found');
 
-    const overrides = await this.crmPrisma.userModuleAccess.findMany({
+    const overrides = await this.crm.userModuleAccess.findMany({
       where: { userId, organizationId: tenant.crmOrganizationId },
       select: { moduleKey: true, allowed: true },
     });
@@ -861,7 +865,7 @@ export class TenantOpsService {
     actor: { id: string; email: string },
   ) {
     const tenant = await ensureTenant(this.prisma, tenantId);
-    const user = await this.crmPrisma.user.findFirst({
+    const user = await this.crm.user.findFirst({
       where: { id: userId, organizationId: tenant.crmOrganizationId, isDeleted: false },
       select: { id: true, email: true },
     });
@@ -872,7 +876,7 @@ export class TenantOpsService {
       ...dto.denied.map((key) => ({ moduleKey: normalizeModuleKey(key), allowed: false })),
     ];
 
-    await this.crmPrisma.$transaction(async (tx) => {
+    await this.crm.$transaction(async (tx) => {
       await tx.userModuleAccess.deleteMany({
         where: { userId, organizationId: tenant.crmOrganizationId },
       });
@@ -935,8 +939,8 @@ export class TenantOpsService {
     }
 
     const [items, total] = await Promise.all([
-      this.crmPrisma.role.findMany({ where, skip, take, orderBy: { createdAt: 'desc' } }),
-      this.crmPrisma.role.count({ where }),
+      this.crm.role.findMany({ where, skip, take, orderBy: { createdAt: 'desc' } }),
+      this.crm.role.count({ where }),
     ]);
 
     return { items, meta: buildPageMeta(page, take, total, undefined) };
@@ -945,11 +949,11 @@ export class TenantOpsService {
   async getTenantRole(tenantId: string, roleId: string) {
     const tenant = await ensureTenantLoose(this.prisma, tenantId);
     if (!tenant.crmOrganizationId) throw new NotFoundException('Role not found');
-    const role = await this.crmPrisma.role.findFirst({
+    const role = await this.crm.role.findFirst({
       where: { id: roleId, organizationId: tenant.crmOrganizationId, isDeleted: false },
     });
     if (!role) throw new NotFoundException('Role not found');
-    const memberCount = await this.crmPrisma.userRoleAssignment.count({
+    const memberCount = await this.crm.userRoleAssignment.count({
       where: { roleId, organizationId: tenant.crmOrganizationId },
     });
     return { ...role, memberCount };
@@ -963,7 +967,7 @@ export class TenantOpsService {
     const tenant = await ensureTenant(this.prisma, tenantId);
     const code = (dto.code || dto.name).trim().toUpperCase().replace(/\s+/g, '_');
 
-    const clash = await this.crmPrisma.role.findFirst({
+    const clash = await this.crm.role.findFirst({
       where: {
         organizationId: tenant.crmOrganizationId,
         isDeleted: false,
@@ -972,7 +976,7 @@ export class TenantOpsService {
     });
     if (clash) throw new ConflictException('A role with this name or code already exists');
 
-    const role = await this.crmPrisma.role.create({
+    const role = await this.crm.role.create({
       data: {
         organizationId: tenant.crmOrganizationId,
         name: dto.name.trim(),
@@ -1006,7 +1010,7 @@ export class TenantOpsService {
     actor: { id: string; email: string },
   ) {
     const tenant = await ensureTenant(this.prisma, tenantId);
-    const role = await this.crmPrisma.role.findFirst({
+    const role = await this.crm.role.findFirst({
       where: { id: roleId, organizationId: tenant.crmOrganizationId, isDeleted: false },
     });
     if (!role) throw new NotFoundException('Role not found');
@@ -1014,7 +1018,7 @@ export class TenantOpsService {
       throw new BadRequestException('System roles cannot be renamed');
     }
 
-    const updated = await this.crmPrisma.role.update({
+    const updated = await this.crm.role.update({
       where: { id: roleId },
       data: {
         name: dto.name?.trim(),
@@ -1038,14 +1042,14 @@ export class TenantOpsService {
 
   async deleteTenantRole(tenantId: string, roleId: string, actor: { id: string; email: string }) {
     const tenant = await ensureTenant(this.prisma, tenantId);
-    const role = await this.crmPrisma.role.findFirst({
+    const role = await this.crm.role.findFirst({
       where: { id: roleId, organizationId: tenant.crmOrganizationId, isDeleted: false },
     });
     if (!role) throw new NotFoundException('Role not found');
     if (role.isSystem) throw new BadRequestException('System roles cannot be deleted');
 
     // Validation: Check for users assigned to this role
-    const userCount = await this.crmPrisma.userRoleAssignment.count({
+    const userCount = await this.crm.userRoleAssignment.count({
       where: { roleId, organizationId: tenant.crmOrganizationId },
     });
 
@@ -1055,12 +1059,12 @@ export class TenantOpsService {
       );
     }
 
-    await this.crmPrisma.$transaction([
-      this.crmPrisma.role.update({
+    await this.crm.$transaction([
+      this.crm.role.update({
         where: { id: roleId },
         data: { isDeleted: true, deletedAt: new Date(), deletedById: actor.id },
       }),
-      this.crmPrisma.userRoleAssignment.deleteMany({
+      this.crm.userRoleAssignment.deleteMany({
         where: { roleId, organizationId: tenant.crmOrganizationId },
       }),
     ]);
@@ -1081,7 +1085,7 @@ export class TenantOpsService {
 
   async cloneTenantRole(tenantId: string, roleId: string, actor: { id: string; email: string }) {
     const tenant = await ensureTenant(this.prisma, tenantId);
-    const role = await this.crmPrisma.role.findFirst({
+    const role = await this.crm.role.findFirst({
       where: { id: roleId, organizationId: tenant.crmOrganizationId, isDeleted: false },
     });
     if (!role) throw new NotFoundException('Role not found');
@@ -1089,7 +1093,7 @@ export class TenantOpsService {
     const name = `${role.name} Copy`;
     const code = `${role.code}_COPY`;
 
-    const clone = await this.crmPrisma.role.create({
+    const clone = await this.crm.role.create({
       data: {
         organizationId: tenant.crmOrganizationId,
         name,
@@ -1123,12 +1127,12 @@ export class TenantOpsService {
     actor: { id: string; email: string },
   ) {
     const tenant = await ensureTenant(this.prisma, tenantId);
-    const role = await this.crmPrisma.role.findFirst({
+    const role = await this.crm.role.findFirst({
       where: { id: roleId, organizationId: tenant.crmOrganizationId, isDeleted: false },
     });
     if (!role) throw new NotFoundException('Role not found');
 
-    const updated = await this.crmPrisma.role.update({
+    const updated = await this.crm.role.update({
       where: { id: roleId },
       data: {
         permissions: dto.permissions,
@@ -1139,12 +1143,12 @@ export class TenantOpsService {
     // Invalidate the CRM per-user effective-permission cache for everyone with
     // this role so the new permissions take effect immediately (the CRM's
     // PermissionInheritanceService otherwise serves cached permissions for 5 min).
-    const affectedUsers = await this.crmPrisma.userRoleAssignment.findMany({
+    const affectedUsers = await this.crm.userRoleAssignment.findMany({
       where: { roleId, organizationId: tenant.crmOrganizationId },
       select: { userId: true },
     });
     if (affectedUsers.length > 0) {
-      await this.crmPrisma.user.updateMany({
+      await this.crm.user.updateMany({
         where: { id: { in: affectedUsers.map((u) => u.userId) } },
         data: { lastPermissionCalculation: null, effectivePermissions: PrismaCrm.DbNull },
       });
@@ -1173,7 +1177,7 @@ export class TenantOpsService {
   async getTenantPermissions(tenantId: string): Promise<Record<string, Record<string, boolean>>> {
     const tenant = await ensureTenantLoose(this.prisma, tenantId);
     if (!tenant.crmOrganizationId) return {};
-    const roles = await this.crmPrisma.role.findMany({
+    const roles = await this.crm.role.findMany({
       where: { organizationId: tenant.crmOrganizationId, isDeleted: false },
       select: { permissions: true },
     });
@@ -1202,13 +1206,13 @@ export class TenantOpsService {
     if (query.q) where.email = { contains: query.q, mode: 'insensitive' as const };
 
     const [items, total] = await Promise.all([
-      this.crmPrisma.loginAttempt.findMany({
+      this.crm.loginAttempt.findMany({
         where,
         skip,
         take,
         orderBy: { createdAt: 'desc' },
       }),
-      this.crmPrisma.loginAttempt.count({ where }),
+      this.crm.loginAttempt.count({ where }),
     ]);
     return { items, meta: buildPageMeta(page, take, total, undefined) };
   }
@@ -1225,8 +1229,8 @@ export class TenantOpsService {
     if (query.active !== undefined) where.isRevoked = !query.active;
 
     const [items, total] = await Promise.all([
-      this.crmPrisma.session.findMany({ where, skip, take, orderBy: { loginAt: 'desc' } }),
-      this.crmPrisma.session.count({ where }),
+      this.crm.session.findMany({ where, skip, take, orderBy: { loginAt: 'desc' } }),
+      this.crm.session.count({ where }),
     ]);
     return { items, meta: buildPageMeta(page, take, total, undefined) };
   }
@@ -1237,17 +1241,17 @@ export class TenantOpsService {
     actor: { id: string; email: string },
   ) {
     const tenant = await ensureTenant(this.prisma, tenantId);
-    const session = await this.crmPrisma.session.findFirst({
+    const session = await this.crm.session.findFirst({
       where: { id: sessionId, organizationId: tenant.crmOrganizationId },
     });
     if (!session) throw new NotFoundException('Session not found');
 
-    await this.crmPrisma.$transaction([
-      this.crmPrisma.session.update({
+    await this.crm.$transaction([
+      this.crm.session.update({
         where: { id: sessionId },
         data: { isRevoked: true, revokedAt: new Date() },
       }),
-      this.crmPrisma.refreshToken.updateMany({
+      this.crm.refreshToken.updateMany({
         where: { sessionId, isRevoked: false },
         data: { isRevoked: true, revokedAt: new Date() },
       }),
@@ -1271,7 +1275,7 @@ export class TenantOpsService {
   async listAssignableRoles(tenantId: string) {
     const tenant = await ensureTenantLoose(this.prisma, tenantId);
     if (!tenant.crmOrganizationId) return [];
-    return this.crmPrisma.role.findMany({
+    return this.crm.role.findMany({
       where: { organizationId: tenant.crmOrganizationId, isDeleted: false },
       select: { id: true, name: true, code: true, description: true, isSystem: true },
       orderBy: { name: 'asc' },
