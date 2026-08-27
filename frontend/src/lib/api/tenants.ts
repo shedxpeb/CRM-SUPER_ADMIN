@@ -162,6 +162,14 @@ export async function createTenantUser(
   return res.data;
 }
 
+export async function deleteTenantUser(
+  id: string,
+  userId: string,
+): Promise<{ success: boolean; message: string }> {
+  const res = await api.delete<{ success: boolean; message: string }>(`/tenants/${id}/users/${userId}`);
+  return res.data;
+}
+
 export async function createTenantRole(
   id: string,
   input: { name: string; code?: string; description?: string; permissions?: string[] },

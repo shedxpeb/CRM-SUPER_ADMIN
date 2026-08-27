@@ -1,8 +1,10 @@
 import { Global, Module, Logger } from '@nestjs/common';
 import { ConfigModule as NestConfigModule } from '@nestjs/config';
+import * as fs from 'fs';
+import * as path from 'path';
 import configuration from './configuration';
 import { AppConfigService } from './app.config';
-import { validateEnv } from './env.validation';
+import { validateEnv, applyConfigToProcessEnv } from './env.validation';
 
 const logger = new Logger('ConfigModule');
 
@@ -20,10 +22,23 @@ const logger = new Logger('ConfigModule');
   imports: [
     NestConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: ['.env', '.env.local'],
+      // Production reads .env.production only; development uses .env.
+      // Use absolute path to ensure correct file is loaded regardless of cwd.
+      envFilePath: (() => {
+        const isProduction = process.env.NODE_ENV === 'production';
+        const hasProductionEnv = fs.existsSync(path.join(process.cwd(), '.env.production'));
+        if (isProduction || hasProductionEnv) {
+          return [
+            path.join(process.cwd(), '.env.production'),
+            path.join(process.cwd(), 'production.env'),
+          ];
+        }
+        return [path.join(process.cwd(), '.env')];
+      })(),
       load: [configuration],
       validate: (config) => {
         try {
+          applyConfigToProcessEnv(config);
           validateEnv(config);
           logger.log('Environment validation passed');
         } catch (error) {

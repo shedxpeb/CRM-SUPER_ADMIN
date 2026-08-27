@@ -136,6 +136,20 @@ export class TenantOpsController {
     });
   }
 
+  @Delete('users/:userId')
+  @RequirePermissions('users:manage')
+  @ApiOperation({ summary: 'Soft-delete a CRM user for a tenant' })
+  deleteUser(
+    @Param('id') id: string,
+    @Param('userId') userId: string,
+    @CurrentUser() actor: CurrentUser,
+  ) {
+    return this.tenantOpsService.softDeleteTenantUser(id, userId, {
+      id: actor.id,
+      email: actor.email,
+    });
+  }
+
   @Get('users/:userId/roles')
   @RequirePermissions('users:read')
   @ApiOperation({ summary: 'Get the roles assigned to a CRM user' })

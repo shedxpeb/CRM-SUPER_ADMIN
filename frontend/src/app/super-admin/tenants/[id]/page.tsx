@@ -26,6 +26,7 @@ import {
   LogIn,
   UserPlus,
   RefreshCw,
+  Trash2,
 } from 'lucide-react';
 import { PageHeader, LoadingState, ErrorState } from '@/components/sa/PageHeader';
 import { StatusBadge } from '@/components/sa/StatusBadge';
@@ -59,6 +60,7 @@ import {
   useSetUserPermissions,
   useUserModules,
   useSetUserModules,
+  useDeleteTenantUser,
 } from '@/lib/queries';
 import { Can } from '@/features/auth/rbac';
 import { RouteGuard } from '@/features/auth/RouteGuard';
@@ -149,6 +151,7 @@ export default function TenantDetailPage() {
   const [createRoleOpen, setCreateRoleOpen] = useState(false);
   const [editPermissionsRole, setEditPermissionsRole] = useState<TenantRole | null>(null);
   const [accessControlUser, setAccessControlUser] = useState<TenantUser | null>(null);
+  const [deleteUser, setDeleteUser] = useState<TenantUser | null>(null);
 
   const tenant = useTenant(id);
   const activity = useTenantActivity(id, { page: activityPage, pageSize: 15 });
@@ -163,6 +166,7 @@ export default function TenantDetailPage() {
   const updateTenantModules = useUpdateTenantModules();
   const retryProvisioning = useRetryTenantProvisioning();
   const assignableRoles = useTenantAssignableRoles(id);
+  const deleteUserMutation = useDeleteTenantUser();
 
   if (tenant.isError || !tenant.data)
     return <ErrorState message="Failed to load tenant" onRetry={tenant.refetch} />;
@@ -377,7 +381,7 @@ export default function TenantDetailPage() {
             ) : (
               <>
                 <DataTable
-                  columns={usersColumns((user) => setAccessControlUser(user))}
+                  columns={usersColumns((user) => setAccessControlUser(user), (user) => setDeleteUser(user))}
                   data={users.data?.data ?? []}
                   isLoading={users.isLoading}
                   isError={users.isError}
@@ -550,6 +554,34 @@ export default function TenantDetailPage() {
           user={accessControlUser}
           onClose={() => setAccessControlUser(null)}
         />
+      )}
+      {deleteUser && (
+        <Dialog open onOpenChange={() => setDeleteUser(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Delete User</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 pt-2">
+              <p className="text-sm text-sa-text-muted">
+                Are you sure you want to delete <strong className="text-sa-text">{deleteUser.name ?? deleteUser.email}</strong>?
+                This will deactivate the user and revoke all active sessions.
+              </p>
+              <div className="flex justify-end gap-2">
+                <Button variant="ghost" onClick={() => setDeleteUser(null)}>Cancel</Button>
+                <Button
+                  variant="destructive"
+                  disabled={deleteUserMutation.isPending}
+                  onClick={async () => {
+                    await deleteUserMutation.mutateAsync({ id, userId: deleteUser.id });
+                    setDeleteUser(null);
+                  }}
+                >
+                  {deleteUserMutation.isPending ? 'Deleting…' : 'Delete User'}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       )}
       </div>
     </RouteGuard>
@@ -793,7 +825,10 @@ function SettingsTab({
   );
 }
 
-function usersColumns(onAccessControl: (user: TenantUser) => void): ColumnDef<TenantUser, unknown>[] {
+function usersColumns(
+  onAccessControl: (user: TenantUser) => void,
+  onDelete: (user: TenantUser) => void,
+): ColumnDef<TenantUser, unknown>[] {
   return [
     { accessorKey: 'name', header: 'Name', cell: ({ row }) => <span className="text-sm text-sa-text-secondary">{row.original.name ?? row.original.email}</span> },
     { accessorKey: 'email', header: 'Email', cell: ({ row }) => <span className="text-xs text-sa-text-muted">{row.original.email}</span> },
@@ -801,13 +836,18 @@ function usersColumns(onAccessControl: (user: TenantUser) => void): ColumnDef<Te
     { accessorKey: 'lastLogin', header: 'Last Login', cell: ({ row }) => <span className="text-xs text-sa-text-muted">{row.original.lastLogin ? timeAgo(row.original.lastLogin) : '—'}</span> },
     { accessorKey: 'isActive', header: 'Status', cell: ({ row }) => <StatusBadge status={row.original.isActive ? 'ACTIVE' : 'INACTIVE'} /> },
     {
-      id: 'access',
+      id: 'actions',
       header: '',
       cell: ({ row }) => (
-        <Button variant="outline" size="sm" className="gap-1.5" onClick={() => onAccessControl(row.original)}>
-          <Key className="h-3.5 w-3.5" />
-          Access Control
-        </Button>
+        <div className="flex items-center gap-1.5">
+          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => onAccessControl(row.original)}>
+            <Key className="h-3.5 w-3.5" />
+            Access Control
+          </Button>
+          <Button variant="outline" size="sm" className="gap-1.5 text-red-400 hover:text-red-300 hover:border-red-500/40" onClick={() => onDelete(row.original)}>
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
+        </div>
       ),
     },
   ];
@@ -1118,21 +1158,22 @@ function UserDirectPermissions({ tenantId, userId }: { tenantId: string; userId:
   const [granted, setGranted] = useState<Set<string>>(new Set());
   const [denied, setDenied] = useState<Set<string>>(new Set());
   const [loaded, setLoaded] = useState(false);
+  const [showSaved, setShowSaved] = useState(false);
 
   useEffect(() => {
-    if (overrides.data && !loaded) {
+    if (overrides.data) {
       setGranted(new Set(overrides.data.granted));
       setDenied(new Set(overrides.data.denied));
       setLoaded(true);
     }
-  }, [overrides.data, loaded]);
+  }, [overrides.data]);
 
   if (catalog.isLoading || overrides.isLoading) return <LoadingState label="Loading permissions…" />;
   if (catalog.isError || overrides.isError)
     return <ErrorState message="Failed to load permissions" onRetry={() => { catalog.refetch(); overrides.refetch(); }} />;
 
   const groups = catalog.data ?? {};
-  const dirty = !loaded || (overrides.data !== undefined && (granted.size !== overrides.data.granted.length || denied.size !== overrides.data.denied.length));
+  const dirty = overrides.data !== undefined && (granted.size !== overrides.data.granted.length || denied.size !== overrides.data.denied.length);
 
   const toggle = (perm: string, type: 'grant' | 'deny') => {
     const [setA, setB] = type === 'grant' ? [setGranted, setDenied] : [setDenied, setGranted];
@@ -1147,6 +1188,7 @@ function UserDirectPermissions({ tenantId, userId }: { tenantId: string; userId:
       next.delete(perm);
       return next;
     });
+    setShowSaved(false);
   };
 
   const handleSave = async () => {
@@ -1155,6 +1197,8 @@ function UserDirectPermissions({ tenantId, userId }: { tenantId: string; userId:
       userId,
       input: { granted: Array.from(granted), denied: Array.from(denied) },
     });
+    setShowSaved(true);
+    setTimeout(() => setShowSaved(false), 3000);
   };
 
   return (
@@ -1200,6 +1244,7 @@ function UserDirectPermissions({ tenantId, userId }: { tenantId: string; userId:
         ))}
       </div>
       {save.isError && <p className="text-xs text-red-400">Failed to save permissions.</p>}
+      {showSaved && <p className="text-xs text-green-500">Permissions saved successfully.</p>}
       <div className="flex justify-end">
         <Button disabled={!dirty || save.isPending} onClick={handleSave} className="gap-1.5">
           <Save className="h-3.5 w-3.5" />
@@ -1217,21 +1262,22 @@ function UserModuleAccessEditor({ tenantId, userId }: { tenantId: string; userId
   const [allowed, setAllowed] = useState<Set<string>>(new Set());
   const [denied, setDenied] = useState<Set<string>>(new Set());
   const [loaded, setLoaded] = useState(false);
+  const [showSaved, setShowSaved] = useState(false);
 
   useEffect(() => {
-    if (overrides.data && !loaded) {
+    if (overrides.data) {
       setAllowed(new Set(overrides.data.allowed));
       setDenied(new Set(overrides.data.denied));
       setLoaded(true);
     }
-  }, [overrides.data, loaded]);
+  }, [overrides.data]);
 
   if (catalog.isLoading || overrides.isLoading) return <LoadingState label="Loading modules…" />;
   if (catalog.isError || overrides.isError)
     return <ErrorState message="Failed to load modules" onRetry={() => { catalog.refetch(); overrides.refetch(); }} />;
 
   const entries = catalog.data ?? [];
-  const dirty = !loaded || (overrides.data !== undefined && (allowed.size !== overrides.data.allowed.length || denied.size !== overrides.data.denied.length));
+  const dirty = overrides.data !== undefined && (allowed.size !== overrides.data.allowed.length || denied.size !== overrides.data.denied.length);
 
   const toggle = (moduleKey: string, type: 'allow' | 'deny') => {
     const [setA, setB] = type === 'allow' ? [setAllowed, setDenied] : [setDenied, setAllowed];
@@ -1246,6 +1292,7 @@ function UserModuleAccessEditor({ tenantId, userId }: { tenantId: string; userId
       next.delete(moduleKey);
       return next;
     });
+    setShowSaved(false);
   };
 
   const handleSave = async () => {
@@ -1254,6 +1301,8 @@ function UserModuleAccessEditor({ tenantId, userId }: { tenantId: string; userId
       userId,
       input: { allowed: Array.from(allowed), denied: Array.from(denied) },
     });
+    setShowSaved(true);
+    setTimeout(() => setShowSaved(false), 3000);
   };
 
   return (
@@ -1297,6 +1346,7 @@ function UserModuleAccessEditor({ tenantId, userId }: { tenantId: string; userId
         ))}
       </div>
       {save.isError && <p className="text-xs text-red-400">Failed to save module access.</p>}
+      {showSaved && <p className="text-xs text-green-500">Module access saved successfully.</p>}
       <div className="flex justify-end">
         <Button disabled={!dirty || save.isPending} onClick={handleSave} className="gap-1.5">
           <Save className="h-3.5 w-3.5" />

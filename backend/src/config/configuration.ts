@@ -7,6 +7,7 @@ export default () => ({
   cookieSecret: process.env.COOKIE_SECRET || '',
   database: {
     url: process.env.DATABASE_URL,
+    crmUrl: process.env.CRM_DATABASE_URL,
   },
   jwt: {
     secret: process.env.JWT_SECRET || 'peb-super-admin-jwt-secret-dev-only-min-32-chars',
