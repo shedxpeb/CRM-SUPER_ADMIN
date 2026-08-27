@@ -1,9 +1,18 @@
-export function validateEnv(config: any): void {
+export function applyConfigToProcessEnv(config: Record<string, unknown>): void {
+  for (const [key, value] of Object.entries(config)) {
+    if (value === undefined || value === null) continue;
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+      process.env[key] = String(value);
+    }
+  }
+}
+
+export function validateEnv(config?: Record<string, unknown>): void {
   const isProd = process.env.NODE_ENV === 'production';
   const missing: string[] = [];
 
   const requireVar = (name: string) => {
-    const value = config[name] || process.env[name];
+    const value = process.env[name];
     if (!value || (typeof value === 'string' && !value.trim())) missing.push(name);
   };
 
@@ -32,7 +41,7 @@ export function validateEnv(config: any): void {
     ];
 
     // JWT_SECRET must be strong in production
-    const jwtSecret = config.jwt?.secret || process.env.JWT_SECRET;
+    const jwtSecret = process.env.JWT_SECRET;
     if (
       !jwtSecret ||
       jwtSecret.length < 32 ||
@@ -42,7 +51,7 @@ export function validateEnv(config: any): void {
     }
 
     // COOKIE_SECRET must be a dedicated strong secret — not a fallback to JWT_SECRET
-    const cookieSecret = config.cookieSecret || process.env.COOKIE_SECRET;
+    const cookieSecret = process.env.COOKIE_SECRET;
     if (
       !cookieSecret ||
       cookieSecret.length < 32 ||
@@ -55,7 +64,7 @@ export function validateEnv(config: any): void {
     }
 
     // FRONTEND_URL must not point to localhost in production
-    const frontendUrl = config.frontendUrl || process.env.FRONTEND_URL || '';
+    const frontendUrl = process.env.FRONTEND_URL || '';
     if (/localhost|127\.0\.0\.1/i.test(frontendUrl)) {
       throw new Error('FRONTEND_URL must not point to localhost in production');
     }

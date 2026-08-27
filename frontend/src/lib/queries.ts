@@ -182,6 +182,7 @@ export function useSetUserPermissions() {
     }) => tenantsApi.setUserPermissions(id, userId, input),
     onSuccess: (_data, { id, userId }) => {
       qc.invalidateQueries({ queryKey: ['tenants', id, 'users', userId, 'permissions'] });
+      qc.invalidateQueries({ queryKey: ['tenants', id, 'users'] });
     },
   });
 }
@@ -208,6 +209,7 @@ export function useSetUserModules() {
     }) => tenantsApi.setUserModules(id, userId, input),
     onSuccess: (_data, { id, userId }) => {
       qc.invalidateQueries({ queryKey: ['tenants', id, 'users', userId, 'modules'] });
+      qc.invalidateQueries({ queryKey: ['tenants', id, 'users'] });
     },
   });
 }
@@ -253,6 +255,17 @@ export function useCreateTenantUser() {
   return useMutation({
     mutationFn: ({ id, input }: { id: string; input: Parameters<typeof tenantsApi.createTenantUser>[1] }) =>
       tenantsApi.createTenantUser(id, input),
+    onSuccess: (_data, { id }) => {
+      qc.invalidateQueries({ queryKey: ['tenants', id, 'users'] });
+    },
+  });
+}
+
+export function useDeleteTenantUser() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, userId }: { id: string; userId: string }) =>
+      tenantsApi.deleteTenantUser(id, userId),
     onSuccess: (_data, { id }) => {
       qc.invalidateQueries({ queryKey: ['tenants', id, 'users'] });
     },

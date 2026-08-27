@@ -179,7 +179,8 @@ export class AuthService {
     if (!stored.session.isActive) throw new UnauthorizedException('Session is inactive');
 
     // Acquire real Postgres row-level lock
-    await this.prisma.$queryRaw`SELECT 1 FROM "RefreshToken" WHERE "tokenHash" = ${tokenHash} FOR UPDATE`;
+    await this.prisma
+      .$queryRaw`SELECT 1 FROM "RefreshToken" WHERE "tokenHash" = ${tokenHash} FOR UPDATE`;
     this.logger.log(`REFRESH_LOCK_ACQUIRED: tokenHash=${tokenHash.substring(0, 8)}...`);
 
     // Re-fetch after lock
@@ -188,7 +189,12 @@ export class AuthService {
       include: { session: true, user: true },
     });
 
-    if (!fresh || fresh.isRevoked || fresh.expiresAt < new Date() || fresh.session.expiresAt < new Date()) {
+    if (
+      !fresh ||
+      fresh.isRevoked ||
+      fresh.expiresAt < new Date() ||
+      fresh.session.expiresAt < new Date()
+    ) {
       this.logger.warn(`REFRESH_REUSE_REJECTED: token invalid after lock`);
       throw new UnauthorizedException('Session has expired or been revoked');
     }
@@ -202,7 +208,6 @@ export class AuthService {
       id: string;
       sessionId: string;
       userId: string;
-      organizationId?: string | null;
       session: { isActive: boolean };
       user: {
         id: string;
@@ -406,11 +411,11 @@ export class AuthService {
     const permissions = roleNames.includes('SUPER_ADMIN')
       ? ['*']
       : (
-        await this.prisma.rolePermission.findMany({
-          where: { role: { users: { some: { userId } } } },
-          select: { permission: { select: { key: true } } },
-        })
-      ).map((r) => r.permission.key);
+          await this.prisma.rolePermission.findMany({
+            where: { role: { users: { some: { userId } } } },
+            select: { permission: { select: { key: true } } },
+          })
+        ).map((r) => r.permission.key);
     return { id: userId, email, name, roles: roleNames, permissions };
   }
 

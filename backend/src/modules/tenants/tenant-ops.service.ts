@@ -641,6 +641,53 @@ export class TenantOpsService {
     return { success: true, message: 'All sessions revoked for user' };
   }
 
+  async softDeleteTenantUser(
+    tenantId: string,
+    userId: string,
+    actor: { id: string; email: string },
+  ) {
+    const tenant = await ensureTenant(this.prisma, tenantId);
+    const user = await this.crm.user.findFirst({
+      where: { id: userId, organizationId: tenant.crmOrganizationId, isDeleted: false },
+    });
+    if (!user) throw new NotFoundException('Tenant user not found');
+
+    // Soft-delete the user and revoke all active sessions
+    await this.crm.$transaction([
+      this.crm.user.update({
+        where: { id: userId },
+        data: {
+          isDeleted: true,
+          deletedAt: new Date(),
+          deletedById: actor.id,
+          isActive: false,
+          version: { increment: 1 },
+        },
+      }),
+      this.crm.session.updateMany({
+        where: { userId, isRevoked: false },
+        data: { isRevoked: true, revokedAt: new Date() },
+      }),
+      this.crm.refreshToken.updateMany({
+        where: { userId, isRevoked: false },
+        data: { isRevoked: true, revokedAt: new Date() },
+      }),
+    ]);
+
+    await this.auditService.record({
+      actorId: actor.id,
+      actorEmail: actor.email,
+      action: 'tenant.user.soft_delete',
+      targetType: 'User',
+      targetId: userId,
+      targetName: user.email,
+      tenantId,
+      severity: 'WARNING',
+    });
+
+    return { success: true, message: 'User deleted' };
+  }
+
   async getTenantUserRoles(tenantId: string, userId: string) {
     const tenant = await ensureTenantLoose(this.prisma, tenantId);
     if (!tenant.crmOrganizationId) throw new NotFoundException('Tenant user not found');
