@@ -20,7 +20,7 @@ export class AuthCookieInterceptor implements NestInterceptor {
     return next.handle().pipe(
       map((data: Record<string, unknown>) => {
         if (typeof data?.refreshToken === 'string') {
-          const maxAge = 7 * 24 * 60 * 60;
+          const maxAge = 10 * 24 * 60 * 60;
           res.setCookie(name, data.refreshToken, {
             path,
             httpOnly: true,

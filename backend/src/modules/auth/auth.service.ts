@@ -106,7 +106,7 @@ export class AuthService {
     }
 
     const refresh = this.tokenService.generateRefreshToken();
-    const refreshExpiresAt = addDays(new Date(), 7);
+    const refreshExpiresAt = addDays(new Date(), 10);
 
     const session = await this.sessionService.createSession({
       userId: user.id,
@@ -180,7 +180,7 @@ export class AuthService {
 
     // Acquire real Postgres row-level lock
     await this.prisma
-      .$queryRaw`SELECT 1 FROM "RefreshToken" WHERE "tokenHash" = ${tokenHash} FOR UPDATE`;
+      .$queryRaw`SELECT 1 FROM "refresh_tokens" WHERE "tokenHash" = ${tokenHash} FOR UPDATE`;
     this.logger.log(`REFRESH_LOCK_ACQUIRED: tokenHash=${tokenHash.substring(0, 8)}...`);
 
     // Re-fetch after lock
@@ -220,7 +220,7 @@ export class AuthService {
     userAgent?: string,
   ): Promise<AuthResponse> {
     const newRefresh = this.tokenService.generateRefreshToken();
-    const newExpiry = addDays(new Date(), 7);
+    const newExpiry = addDays(new Date(), 10);
 
     await this.prisma.refreshToken.update({
       where: { id: storedToken.id },
