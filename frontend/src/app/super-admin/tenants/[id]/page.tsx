@@ -1115,7 +1115,7 @@ function UserRoleAssignment({ tenantId, userId }: { tenantId: string; userId: st
       <div className="p-3 rounded-lg bg-sa-chart-bg border border-sa-border">
         <p className="text-xs text-sa-text-muted">
           The assigned role is the <strong className="text-sa-text">primary source of permissions</strong>.
-          Changing the role changes the user's default permissions immediately.
+          Changing the role changes the user&apos;s default permissions immediately.
           Use the <strong className="text-sa-text">User Overrides</strong> tab only for explicit exceptions.
         </p>
       </div>
@@ -1379,7 +1379,7 @@ function UserOverridesEditor({ tenantId, userId }: { tenantId: string; userId: s
         <AlertCircle className="h-4 w-4 text-sa-accent mt-0.5" />
         <div>
           <p className="text-xs text-sa-text-muted">
-            These are <strong className="text-sa-text">explicit exceptions</strong> to the user's role permissions.
+            These are <strong className="text-sa-text">explicit exceptions</strong> to the user&apos;s role permissions.
             Leave all overrides empty to use the role defaults.
           </p>
           <p className="text-xs text-sa-text-dim mt-1">
