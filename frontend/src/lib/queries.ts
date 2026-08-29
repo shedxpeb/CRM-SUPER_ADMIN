@@ -160,6 +160,14 @@ export function useRemoveTenantUserRoles() {
   });
 }
 
+export function useEffectivePermissions(tenantId: string, userId: string | null) {
+  return useQuery({
+    queryKey: ['tenants', tenantId, 'users', userId, 'effective-permissions'] as const,
+    queryFn: () => tenantsApi.getEffectivePermissions(tenantId, userId!),
+    enabled: !!tenantId && !!userId,
+  });
+}
+
 export function useUserPermissions(tenantId: string, userId: string | null) {
   return useQuery({
     queryKey: ['tenants', tenantId, 'users', userId, 'permissions'] as const,

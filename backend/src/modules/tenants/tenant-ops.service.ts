@@ -208,35 +208,10 @@ export class TenantOpsService {
             });
             await Promise.all(crmUpdates);
 
-            // Step 3: When modules are disabled, remove module-specific permissions from non-system roles
-            const disabledModules = Object.entries(modules)
-              .filter(([, enabled]) => !enabled)
-              .map(([key]) => normalizeModuleKey(key));
-
-            if (disabledModules.length > 0 && tenant.crmOrganizationId) {
-              const roles = await crmTx.role.findMany({
-                where: {
-                  organizationId: tenant.crmOrganizationId,
-                  isDeleted: false,
-                  isSystem: false,
-                },
-              });
-
-              for (const role of roles) {
-                const currentPermissions = role.permissions || [];
-                const filteredPermissions = currentPermissions.filter((perm: string) => {
-                  const module = perm.split(':')[0];
-                  return !disabledModules.includes(module);
-                });
-
-                if (filteredPermissions.length !== currentPermissions.length) {
-                  await crmTx.role.update({
-                    where: { id: role.id },
-                    data: { permissions: filteredPermissions },
-                  });
-                }
-              }
-            }
+            // NOTE: Role permissions are NOT modified when modules are disabled.
+            // The CRM PermissionInheritanceService.applyModuleRestrictions() handles
+            // module-level filtering at runtime. Role permissions persist so they
+            // automatically become effective again when the module is re-enabled.
 
             // Invalidate effective-permission caches for every user of the org
             // so permission checks reflect the new module state immediately
@@ -740,9 +715,14 @@ export class TenantOpsService {
       }),
       this.crm.user.update({
         where: { id: userId },
-        data: role.code
-          ? { role: toCrmUserRole(role.code), version: { increment: 1 } }
-          : { version: { increment: 1 } },
+        data: {
+          ...(role.code ? { role: toCrmUserRole(role.code) } : {}),
+          version: { increment: 1 },
+          // Invalidate the effective-permission cache so the new role takes
+          // effect immediately (the CRM cache lasts 5 minutes otherwise).
+          lastPermissionCalculation: null,
+          effectivePermissions: PrismaCrm.DbNull,
+        },
       }),
     ]);
 
@@ -777,7 +757,12 @@ export class TenantOpsService {
       }),
       this.crm.user.update({
         where: { id: userId },
-        data: { role: DEFAULT_CRM_ROLE as CrmUserRole, version: { increment: 1 } },
+        data: {
+          role: DEFAULT_CRM_ROLE as CrmUserRole,
+          version: { increment: 1 },
+          lastPermissionCalculation: null,
+          effectivePermissions: PrismaCrm.DbNull,
+        },
       }),
     ]);
 
@@ -792,6 +777,134 @@ export class TenantOpsService {
     });
 
     return { success: true, message: 'Role removed from user' };
+  }
+
+  // ── Effective permissions (centralized resolver) ─────────────────────────────
+
+  async getEffectivePermissionsForUser(tenantId: string, userId: string) {
+    const tenant = await ensureTenantLoose(this.prisma, tenantId);
+    if (!tenant.crmOrganizationId) throw new NotFoundException('Tenant user not found');
+
+    const user = await this.crm.user.findFirst({
+      where: { id: userId, organizationId: tenant.crmOrganizationId, isDeleted: false },
+      select: { id: true, email: true, name: true, role: true, permissionVersion: true },
+    });
+    if (!user) throw new NotFoundException('Tenant user not found');
+
+    // Super Admin and Owner have full access
+    if (user.role === 'SUPER_ADMIN' || user.role === 'OWNER') {
+      return {
+        userId: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        assignedRole: null,
+        rolePermissions: ['*'],
+        userOverrides: [],
+        moduleOverrides: [],
+        effectivePermissions: ['*'],
+      };
+    }
+
+    // 1. Get assigned role and its permissions
+    const roleAssignments = await this.crm.userRoleAssignment.findMany({
+      where: { userId, organizationId: tenant.crmOrganizationId },
+      include: {
+        role: {
+          select: {
+            id: true,
+            name: true,
+            code: true,
+            permissions: true,
+            inheritsFromId: true,
+            level: true,
+          },
+        },
+      },
+    });
+
+    const primaryRole = roleAssignments[0]?.role ?? null;
+    let rolePermissions: string[] = [];
+
+    if (primaryRole) {
+      // Collect role permissions including inherited
+      const collectRolePermissions = async (roleId: string): Promise<string[]> => {
+        const role = await this.crm.role.findUnique({
+          where: { id: roleId },
+          select: { permissions: true, inheritsFromId: true },
+        });
+        if (!role) return [];
+        const perms = [...(role.permissions ?? [])];
+        if (role.inheritsFromId) {
+          const parentPerms = await collectRolePermissions(role.inheritsFromId);
+          perms.push(...parentPerms);
+        }
+        return [...new Set(perms)];
+      };
+      rolePermissions = await collectRolePermissions(primaryRole.id);
+    }
+
+    // 2. Get user overrides (grant/deny)
+    const userOverrides = await this.crm.userPermission.findMany({
+      where: { userId, organizationId: tenant.crmOrganizationId },
+      select: { permissionKey: true, granted: true },
+    });
+    const grantedOverrides = userOverrides.filter((o) => o.granted).map((o) => o.permissionKey);
+    const deniedOverrides = userOverrides.filter((o) => !o.granted).map((o) => o.permissionKey);
+
+    // 3. Get user module overrides
+    const moduleOverrides = await this.crm.userModuleAccess.findMany({
+      where: { userId, organizationId: tenant.crmOrganizationId },
+      select: { moduleKey: true, allowed: true },
+    });
+    const moduleAllowed = moduleOverrides.filter((o) => o.allowed).map((o) => o.moduleKey);
+    const moduleDenied = moduleOverrides.filter((o) => !o.allowed).map((o) => o.moduleKey);
+
+    // 4. Calculate effective permissions: role + user overrides
+    const effectiveSet = new Set<string>(rolePermissions);
+    for (const key of grantedOverrides) effectiveSet.add(key);
+    for (const key of deniedOverrides) effectiveSet.delete(key);
+
+    // 5. Apply module restrictions
+    const moduleRowCount = await this.crm.organizationModule.count({
+      where: { organizationId: tenant.crmOrganizationId },
+    });
+
+    let enabledModuleKeys: Set<string> | null = null;
+    if (moduleRowCount > 0) {
+      const enabledModules = await this.crm.organizationModule.findMany({
+        where: { organizationId: tenant.crmOrganizationId, enabled: true },
+        select: { moduleKey: true },
+      });
+      enabledModuleKeys = new Set(enabledModules.map((m) => normalizeModuleKey(m.moduleKey)));
+    }
+
+    const userModuleDenied = new Set(moduleDenied.map((k) => normalizeModuleKey(k)));
+    const userModuleAllowed = new Set(moduleAllowed.map((k) => normalizeModuleKey(k)));
+
+    const effectivePermissions = Array.from(effectiveSet).filter((perm) => {
+      const moduleKey = normalizeModuleKey(perm.split(':')[0]);
+      if (userModuleDenied.has(moduleKey)) return false;
+      if (userModuleAllowed.has(moduleKey)) return true;
+      if (!enabledModuleKeys) return true;
+      return enabledModuleKeys.has(moduleKey);
+    });
+
+    return {
+      userId: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      assignedRole: primaryRole ? { id: primaryRole.id, name: primaryRole.name, code: primaryRole.code } : null,
+      rolePermissions,
+      userOverrides: [...grantedOverrides.map((k) => ({ key: k, type: 'granted' as const })),
+        ...deniedOverrides.map((k) => ({ key: k, type: 'denied' as const }))],
+      moduleOverrides: {
+        allowed: moduleAllowed,
+        denied: moduleDenied,
+      },
+      effectivePermissions,
+    };
   }
 
   // ── User permission overrides (grant/deny) ──────────────────────────────────

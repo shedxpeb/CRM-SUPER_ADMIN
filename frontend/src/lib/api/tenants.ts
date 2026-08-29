@@ -226,6 +226,23 @@ export async function getPermissionCatalog(id: string): Promise<Record<string, s
   return res.data;
 }
 
+export interface EffectivePermissions {
+  userId: string;
+  email: string;
+  name: string | null;
+  role: string;
+  assignedRole: { id: string; name: string; code: string } | null;
+  rolePermissions: string[];
+  userOverrides: { key: string; type: 'granted' | 'denied' }[];
+  moduleOverrides: { allowed: string[]; denied: string[] };
+  effectivePermissions: string[];
+}
+
+export async function getEffectivePermissions(id: string, userId: string): Promise<EffectivePermissions> {
+  const res = await api.get<EffectivePermissions>(`/tenants/${id}/users/${userId}/effective-permissions`);
+  return res.data;
+}
+
 export interface UserPermissionOverrides {
   userId: string;
   email: string;
