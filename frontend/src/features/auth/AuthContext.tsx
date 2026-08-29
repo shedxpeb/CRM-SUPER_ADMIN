@@ -31,9 +31,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const data = await getMe();
       setUser(data);
-    } catch {
-      localStorage.removeItem(ACCESS_TOKEN_KEY);
-      setUser(null);
+    } catch (err: unknown) {
+      // Only clear auth state on 401/403 — transient errors (500, network) must not log the user out.
+      const status = (err as { status?: number }).status;
+      if (status === 401 || status === 403) {
+        localStorage.removeItem(ACCESS_TOKEN_KEY);
+        setUser(null);
+      }
+      // For other errors (500, network) keep the token and user so retry works.
     } finally {
       setIsLoading(false);
     }
