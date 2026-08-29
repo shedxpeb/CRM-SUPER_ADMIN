@@ -56,6 +56,7 @@ import {
   useUserRoles,
   useAssignTenantUserRole,
   useRemoveTenantUserRoles,
+  useEffectivePermissions,
   useUserPermissions,
   useSetUserPermissions,
   useUserModules,
@@ -65,7 +66,7 @@ import {
 import { Can } from '@/features/auth/rbac';
 import { RouteGuard } from '@/features/auth/RouteGuard';
 import { formatDate, formatNumber, formatBytes, timeAgo } from '@/lib/format';
-import { cn } from '@/lib/utils';
+import { cn, normalizeModuleKey } from '@/lib/utils';
 import { DataTable, Pagination } from '@/components/sa/DataTable';
 import type { ColumnDef } from '@tanstack/react-table';
 import type { TenantActivityEntry, AuditLogEntry, TenantUser, TenantRole } from '@/lib/types';
@@ -1038,7 +1039,13 @@ function RolePermissionsDialog({
 }
 
 // ── User Access Control dialog ───────────────────────────────────────────────
-// Per-user tabs: Role Assignment, Direct Permissions (grant/deny), Module Access.
+// Per-user tabs: Role Assignment (primary), Effective Permissions (read-only),
+// User Overrides (explicit exceptions to role permissions).
+//
+// The RBAC hierarchy is:
+//   Organization Module Availability → Assigned Role → Role Permissions → Optional User Override
+// Role permissions are the DEFAULT source of truth. User overrides are only
+// used when an explicit exception is required.
 function UserAccessControlDialog({
   tenantId,
   user,
@@ -1048,9 +1055,9 @@ function UserAccessControlDialog({
   user: TenantUser;
   onClose: () => void;
 }) {
-  const [tab, setTab] = useState<'roles' | 'permissions' | 'modules'>('roles');
+  const [tab, setTab] = useState<'roles' | 'effective' | 'overrides'>('roles');
 
-  const tabButton = (key: typeof tab, label: string, icon: React.ReactNode) => (
+  const tabButton = (key: typeof tab, label: string, icon: React.ReactNode, subtitle?: string) => (
     <button
       key={key}
       onClick={() => setTab(key)}
@@ -1060,6 +1067,7 @@ function UserAccessControlDialog({
           ? 'bg-[var(--sa-accent)] text-white'
           : 'text-sa-text-muted hover:bg-sa-card-solid hover:text-sa-text-secondary',
       )}
+      title={subtitle}
     >
       {icon}
       {label}
@@ -1073,14 +1081,14 @@ function UserAccessControlDialog({
           <DialogTitle>Access Control — {user.name ?? user.email}</DialogTitle>
         </DialogHeader>
         <div className="flex items-center gap-1 pt-1 pb-3 border-b border-sa-border">
-          {tabButton('roles', 'Role Assignment', <ShieldCheck className="h-3.5 w-3.5" />)}
-          {tabButton('permissions', 'Direct Permissions', <Key className="h-3.5 w-3.5" />)}
-          {tabButton('modules', 'Module Access', <Puzzle className="h-3.5 w-3.5" />)}
+          {tabButton('roles', 'Role Assignment', <ShieldCheck className="h-3.5 w-3.5" />, 'Assign or change the user\'s role (primary permission source)')}
+          {tabButton('effective', 'Effective Permissions', <Key className="h-3.5 w-3.5" />, 'Read-only view of the user\'s effective permissions')}
+          {tabButton('overrides', 'User Overrides', <Puzzle className="h-3.5 w-3.5" />, 'Explicit exceptions to the role\'s default permissions')}
         </div>
         <div className="pt-4">
           {tab === 'roles' && <UserRoleAssignment tenantId={tenantId} userId={user.id} />}
-          {tab === 'permissions' && <UserDirectPermissions tenantId={tenantId} userId={user.id} />}
-          {tab === 'modules' && <UserModuleAccessEditor tenantId={tenantId} userId={user.id} />}
+          {tab === 'effective' && <EffectivePermissionsView tenantId={tenantId} userId={user.id} />}
+          {tab === 'overrides' && <UserOverridesEditor tenantId={tenantId} userId={user.id} />}
         </div>
       </DialogContent>
     </Dialog>
@@ -1090,6 +1098,7 @@ function UserAccessControlDialog({
 function UserRoleAssignment({ tenantId, userId }: { tenantId: string; userId: string }) {
   const roles = useTenantAssignableRoles(tenantId);
   const userRoles = useUserRoles(tenantId, userId);
+  const ep = useEffectivePermissions(tenantId, userId);
   const assign = useAssignTenantUserRole();
   const removeAll = useRemoveTenantUserRoles();
 
@@ -1102,10 +1111,19 @@ function UserRoleAssignment({ tenantId, userId }: { tenantId: string; userId: st
 
   return (
     <div className="space-y-4">
+      {/* Primary info: the role determines the user's base permissions */}
+      <div className="p-3 rounded-lg bg-sa-chart-bg border border-sa-border">
+        <p className="text-xs text-sa-text-muted">
+          The assigned role is the <strong className="text-sa-text">primary source of permissions</strong>.
+          Changing the role changes the user's default permissions immediately.
+          Use the <strong className="text-sa-text">User Overrides</strong> tab only for explicit exceptions.
+        </p>
+      </div>
+
       <div>
-        <p className="text-xs font-semibold text-sa-text-secondary uppercase tracking-wider mb-2">Assigned roles</p>
+        <p className="text-xs font-semibold text-sa-text-secondary uppercase tracking-wider mb-2">Assigned role</p>
         {assigned.length === 0 ? (
-          <p className="text-sm text-sa-text-muted">No roles assigned</p>
+          <p className="text-sm text-sa-text-muted">No role assigned</p>
         ) : (
           <div className="flex flex-wrap gap-1.5">
             {assigned.map((r) => (
@@ -1144,36 +1162,187 @@ function UserRoleAssignment({ tenantId, userId }: { tenantId: string; userId: st
           </div>
         )}
       </div>
-      <p className="text-xs text-sa-text-dim">
-        Effective permissions = role permissions + granted direct permissions − denied direct permissions.
-      </p>
+
+      {/* Quick summary */}
+      {ep.data && (
+        <div className="p-3 rounded-lg border border-sa-border">
+          <p className="text-xs text-sa-text-muted mb-2">Permission summary</p>
+          <div className="flex items-center gap-4">
+            <div>
+              <p className="text-lg font-bold text-sa-text">{ep.data.effectivePermissions.length}</p>
+              <p className="text-[10px] text-sa-text-dim">effective permissions</p>
+            </div>
+            <div>
+              <p className="text-lg font-bold text-sa-text">{ep.data.rolePermissions.length}</p>
+              <p className="text-[10px] text-sa-text-dim">from role</p>
+            </div>
+            <div>
+              <p className="text-lg font-bold text-sa-text">{ep.data.userOverrides.length}</p>
+              <p className="text-[10px] text-sa-text-dim">overrides</p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function UserDirectPermissions({ tenantId, userId }: { tenantId: string; userId: string }) {
+// ── Effective Permissions (read-only view) ─────────────────────────────────
+// Shows the user the complete picture: what role they have, what the role
+// grants, what overrides exist, and the final effective result.
+function EffectivePermissionsView({ tenantId, userId }: { tenantId: string; userId: string }) {
+  const ep = useEffectivePermissions(tenantId, userId);
+
+  if (ep.isLoading) return <LoadingState label="Loading effective permissions…" />;
+  if (ep.isError) return <ErrorState message="Failed to load effective permissions" onRetry={ep.refetch} />;
+
+  const data = ep.data;
+  if (!data) return <p className="text-sm text-sa-text-muted">No data</p>;
+
+  // Group permissions by module
+  const groupByModule = (perms: string[]) => {
+    const groups: Record<string, string[]> = {};
+    for (const p of perms) {
+      const mod = p.split(':')[0] || 'other';
+      if (!groups[mod]) groups[mod] = [];
+      groups[mod].push(p);
+    }
+    return groups;
+  };
+
+  const effectiveGroups = groupByModule(data.effectivePermissions);
+  const roleGroups = groupByModule(data.rolePermissions);
+  const overrideKeys = new Set(data.userOverrides.map((o) => o.key));
+
+  return (
+    <div className="space-y-4">
+      {/* Role info */}
+      <div className="flex items-center gap-2 p-3 rounded-lg bg-sa-chart-bg border border-sa-border">
+        <ShieldCheck className="h-4 w-4 text-sa-accent" />
+        <div>
+          <p className="text-xs text-sa-text-muted">Assigned Role</p>
+          <p className="text-sm font-medium text-sa-text">
+            {data.assignedRole ? data.assignedRole.name : 'No role assigned'}
+            {data.assignedRole && (
+              <span className="ml-1.5 text-xs text-sa-text-dim">({data.assignedRole.code})</span>
+            )}
+          </p>
+        </div>
+        <div className="ml-auto">
+          <p className="text-xs text-sa-text-muted">CRM Role</p>
+          <p className="text-sm text-sa-text-secondary">{data.role}</p>
+        </div>
+      </div>
+
+      {/* Overrides summary */}
+      {data.userOverrides.length > 0 && (
+        <div className="flex items-start gap-2 p-3 rounded-lg border border-amber-500/30 bg-amber-500/5">
+          <AlertCircle className="h-4 w-4 text-amber-400 mt-0.5" />
+          <div>
+            <p className="text-xs font-medium text-amber-400">User Overrides Active</p>
+            <p className="text-xs text-sa-text-muted mt-1">
+              {data.userOverrides.length} permission(s) overridden. These override the role defaults.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Permissions grouped by module with role vs override vs effective */}
+      <div className="rounded-lg border border-sa-border overflow-hidden">
+        {Object.keys(effectiveGroups).sort().map((modKey, idx) => (
+          <div key={modKey} className={idx > 0 ? 'border-t border-sa-border' : ''}>
+            <div className="px-3 py-2 bg-sa-card-solid">
+              <span className="text-xs font-semibold text-sa-text-secondary uppercase tracking-wider capitalize">
+                {modKey.replace(/-/g, ' ')}
+              </span>
+            </div>
+            <div className="px-3 py-2 space-y-0.5">
+              {effectiveGroups[modKey].map((perm) => {
+                const fromRole = (roleGroups[modKey] ?? []).includes(perm);
+                const override = data.userOverrides.find((o) => o.key === perm);
+                return (
+                  <div key={perm} className="flex items-center gap-2 px-2 py-1 rounded-md hover:bg-sa-chart-bg">
+                    <span className="text-xs font-mono text-sa-text-secondary flex-1">{perm}</span>
+                    <div className="flex items-center gap-2">
+                      {!fromRole && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-500/10 text-green-500 border border-green-500/30">
+                          granted by override
+                        </span>
+                      )}
+                      {override && (
+                        <span className={cn(
+                          'text-[10px] px-1.5 py-0.5 rounded border',
+                          override.type === 'granted'
+                            ? 'bg-green-500/10 text-green-500 border-green-500/30'
+                            : 'bg-red-500/10 text-red-400 border-red-500/30',
+                        )}>
+                          {override.type === 'granted' ? 'override: granted' : 'override: denied'}
+                        </span>
+                      )}
+                      {fromRole && !override && (
+                        <span className="text-[10px] text-sa-text-dim">from role</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {data.effectivePermissions.length === 0 && (
+        <p className="text-sm text-sa-text-muted text-center py-4">
+          No effective permissions. Assign a role or add user overrides.
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ── User Overrides Editor ───────────────────────────────────────────────────
+// Allows setting explicit per-user permission overrides. These are EXPLICIT
+// EXCEPTIONS to the role's default permissions.
+//
+// The UI clearly shows:
+//   - Role permissions are the default
+//   - Overrides only modify exceptions
+//   - Effective = role ± overrides
+function UserOverridesEditor({ tenantId, userId }: { tenantId: string; userId: string }) {
   const catalog = usePermissionCatalog(tenantId);
-  const overrides = useUserPermissions(tenantId, userId);
+  const ep = useEffectivePermissions(tenantId, userId);
   const save = useSetUserPermissions();
   const [granted, setGranted] = useState<Set<string>>(new Set());
   const [denied, setDenied] = useState<Set<string>>(new Set());
-  const [loaded, setLoaded] = useState(false);
   const [showSaved, setShowSaved] = useState(false);
 
   useEffect(() => {
-    if (overrides.data) {
-      setGranted(new Set(overrides.data.granted));
-      setDenied(new Set(overrides.data.denied));
-      setLoaded(true);
+    if (ep.data) {
+      // Initialize from user overrides (not full permissions)
+      const g = new Set<string>();
+      const d = new Set<string>();
+      for (const o of ep.data.userOverrides) {
+        if (o.type === 'granted') g.add(o.key);
+        else d.add(o.key);
+      }
+      setGranted(g);
+      setDenied(d);
     }
-  }, [overrides.data]);
+  }, [ep.data]);
 
-  if (catalog.isLoading || overrides.isLoading) return <LoadingState label="Loading permissions…" />;
-  if (catalog.isError || overrides.isError)
-    return <ErrorState message="Failed to load permissions" onRetry={() => { catalog.refetch(); overrides.refetch(); }} />;
+  if (catalog.isLoading || ep.isLoading) return <LoadingState label="Loading permissions…" />;
+  if (catalog.isError || ep.isError)
+    return <ErrorState message="Failed to load permissions" onRetry={() => { catalog.refetch(); ep.refetch(); }} />;
 
   const groups = catalog.data ?? {};
-  const dirty = overrides.data !== undefined && (granted.size !== overrides.data.granted.length || denied.size !== overrides.data.denied.length);
+  const rolePerms = new Set(ep.data?.rolePermissions ?? []);
+
+  const dirty = ep.data !== undefined && (
+    granted.size !== ep.data.userOverrides.filter((o) => o.type === 'granted').length ||
+    denied.size !== ep.data.userOverrides.filter((o) => o.type === 'denied').length ||
+    ep.data.userOverrides.filter((o) => o.type === 'granted').some((o) => !granted.has(o.key)) ||
+    ep.data.userOverrides.filter((o) => o.type === 'denied').some((o) => !denied.has(o.key))
+  );
 
   const toggle = (perm: string, type: 'grant' | 'deny') => {
     const [setA, setB] = type === 'grant' ? [setGranted, setDenied] : [setDenied, setGranted];
@@ -1201,51 +1370,97 @@ function UserDirectPermissions({ tenantId, userId }: { tenantId: string; userId:
     setTimeout(() => setShowSaved(false), 3000);
   };
 
+  // Count active overrides
+  const overrideCount = granted.size + denied.size;
+
   return (
     <div className="space-y-4">
+      <div className="flex items-start gap-2 p-3 rounded-lg bg-sa-chart-bg border border-sa-border">
+        <AlertCircle className="h-4 w-4 text-sa-accent mt-0.5" />
+        <div>
+          <p className="text-xs text-sa-text-muted">
+            These are <strong className="text-sa-text">explicit exceptions</strong> to the user's role permissions.
+            Leave all overrides empty to use the role defaults.
+          </p>
+          <p className="text-xs text-sa-text-dim mt-1">
+            <strong>Grant</strong> = add permission not in role · <strong>Deny</strong> = remove permission from role
+          </p>
+        </div>
+      </div>
+
       <div className="rounded-lg border border-sa-border overflow-hidden">
         {Object.keys(groups).sort().map((modKey, idx) => (
           <div key={modKey} className={idx > 0 ? 'border-t border-sa-border' : ''}>
-            <p className="px-3 py-2 bg-sa-card-solid text-xs font-semibold text-sa-text-secondary uppercase tracking-wider capitalize">
-              {modKey.replace(/-/g, ' ')}
-            </p>
+            <div className="px-3 py-2 bg-sa-card-solid">
+              <span className="text-xs font-semibold text-sa-text-secondary uppercase tracking-wider capitalize">
+                {modKey.replace(/-/g, ' ')}
+              </span>
+            </div>
             <div className="px-3 py-2 grid grid-cols-1 sm:grid-cols-2 gap-1">
-              {groups[modKey].map((perm) => (
-                <div key={perm} className="flex items-center justify-between gap-2 px-2 py-1 rounded-md hover:bg-sa-chart-bg">
-                  <span className="text-xs font-mono text-sa-text-secondary">{perm}</span>
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => toggle(perm, 'grant')}
-                      className={cn(
-                        'px-2 py-0.5 rounded text-[10px] font-medium border transition-colors',
-                        granted.has(perm)
-                          ? 'border-green-500/50 bg-green-500/10 text-green-500'
-                          : 'border-sa-border text-sa-text-muted hover:border-green-500/40',
+              {groups[modKey].map((perm) => {
+                const inRole = rolePerms.has(perm);
+                return (
+                  <div key={perm} className="flex items-center justify-between gap-2 px-2 py-1 rounded-md hover:bg-sa-chart-bg">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="text-xs font-mono text-sa-text-secondary truncate">{perm}</span>
+                      {inRole ? (
+                        <span className="text-[10px] text-sa-text-dim shrink-0">(in role)</span>
+                      ) : (
+                        <span className="text-[10px] text-sa-text-dim shrink-0">(not in role)</span>
                       )}
-                    >
-                      Grant
-                    </button>
-                    <button
-                      onClick={() => toggle(perm, 'deny')}
-                      className={cn(
-                        'px-2 py-0.5 rounded text-[10px] font-medium border transition-colors',
-                        denied.has(perm)
-                          ? 'border-red-500/50 bg-red-500/10 text-red-400'
-                          : 'border-sa-border text-sa-text-muted hover:border-red-500/40',
-                      )}
-                    >
-                      Deny
-                    </button>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        onClick={() => toggle(perm, 'grant')}
+                        className={cn(
+                          'px-2 py-0.5 rounded text-[10px] font-medium border transition-colors',
+                          granted.has(perm)
+                            ? 'border-green-500/50 bg-green-500/10 text-green-500'
+                            : 'border-sa-border text-sa-text-muted hover:border-green-500/40',
+                        )}
+                      >
+                        Grant
+                      </button>
+                      <button
+                        onClick={() => toggle(perm, 'deny')}
+                        className={cn(
+                          'px-2 py-0.5 rounded text-[10px] font-medium border transition-colors',
+                          denied.has(perm)
+                            ? 'border-red-500/50 bg-red-500/10 text-red-400'
+                            : 'border-sa-border text-sa-text-muted hover:border-red-500/40',
+                        )}
+                      >
+                        Deny
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         ))}
       </div>
-      {save.isError && <p className="text-xs text-red-400">Failed to save permissions.</p>}
-      {showSaved && <p className="text-xs text-green-500">Permissions saved successfully.</p>}
-      <div className="flex justify-end">
+
+      {save.isError && <p className="text-xs text-red-400">Failed to save overrides.</p>}
+      {showSaved && <p className="text-xs text-green-500">Overrides saved successfully.</p>}
+
+      {overrideCount === 0 && (
+        <p className="text-xs text-sa-text-dim text-center py-2">
+          No overrides set — user inherits all role permissions.
+        </p>
+      )}
+
+      <div className="flex justify-end gap-2">
+        {overrideCount > 0 && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="gap-1.5 text-sa-text-muted"
+            onClick={() => { setGranted(new Set()); setDenied(new Set()); setShowSaved(false); }}
+          >
+            Clear All Overrides
+          </Button>
+        )}
         <Button disabled={!dirty || save.isPending} onClick={handleSave} className="gap-1.5">
           <Save className="h-3.5 w-3.5" />
           {save.isPending ? 'Saving…' : 'Save Overrides'}
@@ -1261,14 +1476,12 @@ function UserModuleAccessEditor({ tenantId, userId }: { tenantId: string; userId
   const save = useSetUserModules();
   const [allowed, setAllowed] = useState<Set<string>>(new Set());
   const [denied, setDenied] = useState<Set<string>>(new Set());
-  const [loaded, setLoaded] = useState(false);
   const [showSaved, setShowSaved] = useState(false);
 
   useEffect(() => {
     if (overrides.data) {
       setAllowed(new Set(overrides.data.allowed));
       setDenied(new Set(overrides.data.denied));
-      setLoaded(true);
     }
   }, [overrides.data]);
 
@@ -1277,19 +1490,27 @@ function UserModuleAccessEditor({ tenantId, userId }: { tenantId: string; userId
     return <ErrorState message="Failed to load modules" onRetry={() => { catalog.refetch(); overrides.refetch(); }} />;
 
   const entries = catalog.data ?? [];
-  const dirty = overrides.data !== undefined && (allowed.size !== overrides.data.allowed.length || denied.size !== overrides.data.denied.length);
+  const dirty = overrides.data !== undefined && (
+    allowed.size !== overrides.data.allowed.length ||
+    denied.size !== overrides.data.denied.length ||
+    overrides.data.allowed.some((k) => !allowed.has(k)) ||
+    overrides.data.denied.some((k) => !denied.has(k))
+  );
 
   const toggle = (moduleKey: string, type: 'allow' | 'deny') => {
+    // Normalize catalog key to CRM canonical form (singular) for consistent
+    // comparison with backend-stored values.
+    const nk = normalizeModuleKey(moduleKey);
     const [setA, setB] = type === 'allow' ? [setAllowed, setDenied] : [setDenied, setAllowed];
     setA((prev) => {
       const next = new Set(prev);
-      if (next.has(moduleKey)) next.delete(moduleKey);
-      else next.add(moduleKey);
+      if (next.has(nk)) next.delete(nk);
+      else next.add(nk);
       return next;
     });
     setB((prev) => {
       const next = new Set(prev);
-      next.delete(moduleKey);
+      next.delete(nk);
       return next;
     });
     setShowSaved(false);
@@ -1307,12 +1528,19 @@ function UserModuleAccessEditor({ tenantId, userId }: { tenantId: string; userId
 
   return (
     <div className="space-y-4">
-      <p className="text-xs text-sa-text-dim">
-        Deny overrides the organization module state (module hidden everywhere). Allow re-enables a module even if it is
-        disabled for the organization.
-      </p>
+      <div className="p-3 rounded-lg bg-sa-chart-bg border border-sa-border">
+        <p className="text-xs text-sa-text-muted">
+          <strong className="text-sa-text">Module Access overrides</strong> control whether a module is available for this specific user.
+          <strong className="text-sa-text"> Deny</strong> hides the module entirely.
+          <strong className="text-sa-text"> Allow</strong> re-enables it even if disabled at the organization level.
+          Leave all overrides empty to use the organization default.
+        </p>
+      </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-        {entries.map((module) => (
+        {entries.map((module) => {
+          // Normalize the catalog key for comparison with backend-stored keys
+          const nk = normalizeModuleKey(module.key);
+          return (
           <div key={module.key} className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg border border-sa-border">
             <div>
               <p className="text-sm font-medium text-sa-text capitalize">{module.label}</p>
@@ -1323,7 +1551,7 @@ function UserModuleAccessEditor({ tenantId, userId }: { tenantId: string; userId
                 onClick={() => toggle(module.key, 'allow')}
                 className={cn(
                   'px-2 py-0.5 rounded text-[10px] font-medium border transition-colors',
-                  allowed.has(module.key)
+                  allowed.has(nk)
                     ? 'border-green-500/50 bg-green-500/10 text-green-500'
                     : 'border-sa-border text-sa-text-muted hover:border-green-500/40',
                 )}
@@ -1334,7 +1562,7 @@ function UserModuleAccessEditor({ tenantId, userId }: { tenantId: string; userId
                 onClick={() => toggle(module.key, 'deny')}
                 className={cn(
                   'px-2 py-0.5 rounded text-[10px] font-medium border transition-colors',
-                  denied.has(module.key)
+                  denied.has(nk)
                     ? 'border-red-500/50 bg-red-500/10 text-red-400'
                     : 'border-sa-border text-sa-text-muted hover:border-red-500/40',
                 )}
@@ -1343,7 +1571,8 @@ function UserModuleAccessEditor({ tenantId, userId }: { tenantId: string; userId
               </button>
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
       {save.isError && <p className="text-xs text-red-400">Failed to save module access.</p>}
       {showSaved && <p className="text-xs text-green-500">Module access saved successfully.</p>}

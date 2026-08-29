@@ -186,6 +186,13 @@ export class TenantOpsController {
     });
   }
 
+  @Get('users/:userId/effective-permissions')
+  @RequirePermissions('users:read')
+  @ApiOperation({ summary: 'Get effective permissions for a CRM user (role + overrides + module restrictions)' })
+  getEffectivePermissions(@Param('id') id: string, @Param('userId') userId: string) {
+    return this.tenantOpsService.getEffectivePermissionsForUser(id, userId);
+  }
+
   @Get('users/:userId/permissions')
   @RequirePermissions('users:read')
   @ApiOperation({ summary: "Get a CRM user's direct permission overrides (grant/deny)" })

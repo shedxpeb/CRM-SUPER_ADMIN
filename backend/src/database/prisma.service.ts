@@ -1,51 +1,45 @@
 import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { Pool } from 'pg';
 import { PrismaClient } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function appendPoolParams(url: string, connectionLimit?: string, poolTimeout?: string): string {
-  if (!url) return url;
-  const hasConnectionLimit = /[?&]connection_limit=/.test(url);
-  const hasPoolTimeout = /[?&]pool_timeout=/.test(url);
-
-  const limit = connectionLimit || '20';
-  const timeout = poolTimeout || '10';
-
-  const separator = url.includes('?') ? '&' : '?';
-  let result = url;
-  if (!hasConnectionLimit) {
-    result += `${separator}connection_limit=${limit}`;
-  }
-  if (!hasPoolTimeout) {
-    result += `${separator}pool_timeout=${timeout}`;
-  }
-  return result;
-}
-
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(PrismaService.name);
+  private pool: Pool;
 
   constructor(private configService: ConfigService) {
     const rawUrl = configService.get<string>('database.url') || '';
-    const connectionLimit = configService.get<string>('DB_CONNECTION_LIMIT');
-    const poolTimeout = configService.get<string>('DB_POOL_TIMEOUT');
     const nodeEnv = configService.get<string>('nodeEnv', 'development');
-    const dbUrl = appendPoolParams(rawUrl, connectionLimit, poolTimeout);
+
+    // Create pg Pool with SSL configuration to accept self-signed certificates
+    const pool = new Pool({
+      connectionString: rawUrl,
+      max: 10,
+      idleTimeoutMillis: 20000,
+      connectionTimeoutMillis: 10000,
+      ssl: {
+        rejectUnauthorized: false,
+      },
+    });
+
+    // Create Prisma adapter with the pool
+    const adapter = new PrismaPg(pool);
 
     super({
-      datasources: {
-        db: {
-          url: dbUrl,
-        },
-      },
+      adapter,
       log: nodeEnv === 'development' ? ['error', 'warn'] : ['error'],
     });
 
-    this.logger.log(`DATABASE_URL: ${dbUrl ? dbUrl.replace(/:[^:@]+@/, ':****@') : 'NOT SET'}`);
+    // Assign pool after super() is called
+    this.pool = pool;
+
+    this.logger.log(`DATABASE_URL: ${rawUrl ? rawUrl.replace(/:[^:@]+@/, ':****@') : 'NOT SET'}`);
   }
 
   async onModuleInit() {
@@ -88,5 +82,6 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
 
   async onModuleDestroy() {
     await this.$disconnect();
+    await this.pool.end();
   }
 }
