@@ -7,7 +7,7 @@ export function applyConfigToProcessEnv(config: Record<string, unknown>): void {
   }
 }
 
-export function validateEnv(config?: Record<string, unknown>): void {
+export function validateEnv(): void {
   const isProd = process.env.NODE_ENV === 'production';
   const missing: string[] = [];
 
@@ -42,21 +42,13 @@ export function validateEnv(config?: Record<string, unknown>): void {
 
     // JWT_SECRET must be strong in production
     const jwtSecret = process.env.JWT_SECRET;
-    if (
-      !jwtSecret ||
-      jwtSecret.length < 32 ||
-      weakSecrets.includes(jwtSecret)
-    ) {
+    if (!jwtSecret || jwtSecret.length < 32 || weakSecrets.includes(jwtSecret)) {
       throw new Error('JWT_SECRET must be a strong secret of at least 32 characters in production');
     }
 
     // COOKIE_SECRET must be a dedicated strong secret — not a fallback to JWT_SECRET
     const cookieSecret = process.env.COOKIE_SECRET;
-    if (
-      !cookieSecret ||
-      cookieSecret.length < 32 ||
-      weakSecrets.includes(cookieSecret)
-    ) {
+    if (!cookieSecret || cookieSecret.length < 32 || weakSecrets.includes(cookieSecret)) {
       throw new Error(
         'COOKIE_SECRET must be a dedicated strong secret of at least 32 characters in production. ' +
           'Do not reuse JWT_SECRET.',

@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from './prisma.service';
 
-export type TxClient = any;
+export type TxClient = unknown;
 
 /**
  * Wraps interactive transactions. Every multi-step mutation in the platform must run

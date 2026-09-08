@@ -77,6 +77,7 @@ export class TenantOpsService {
   ) {}
 
   private get crm() {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return this.crmPrisma as any;
   }
 
@@ -895,10 +896,14 @@ export class TenantOpsService {
       email: user.email,
       name: user.name,
       role: user.role,
-      assignedRole: primaryRole ? { id: primaryRole.id, name: primaryRole.name, code: primaryRole.code } : null,
+      assignedRole: primaryRole
+        ? { id: primaryRole.id, name: primaryRole.name, code: primaryRole.code }
+        : null,
       rolePermissions,
-      userOverrides: [...grantedOverrides.map((k) => ({ key: k, type: 'granted' as const })),
-        ...deniedOverrides.map((k) => ({ key: k, type: 'denied' as const }))],
+      userOverrides: [
+        ...grantedOverrides.map((k) => ({ key: k, type: 'granted' as const })),
+        ...deniedOverrides.map((k) => ({ key: k, type: 'denied' as const })),
+      ],
       moduleOverrides: {
         allowed: moduleAllowed,
         denied: moduleDenied,

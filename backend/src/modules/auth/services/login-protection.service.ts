@@ -102,11 +102,19 @@ export class LoginProtectionService {
 
   async isIpBlocked(ipAddress?: string): Promise<boolean> {
     if (!ipAddress) return false;
-    const row = await this.prisma.blockedIp.findFirst({
-      where: { ipAddress, isActive: true },
-    });
-    if (!row) return false;
-    if (row.blockedUntil && isPast(row.blockedUntil)) return false;
-    return true;
+    try {
+      const row = await this.prisma.blockedIp.findFirst({
+        where: { ipAddress, isActive: true },
+      });
+      if (!row) return false;
+      if (row.blockedUntil && isPast(row.blockedUntil)) return false;
+      return true;
+    } catch (error) {
+      this.logger.error(
+        `Failed to check IP block status: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      // Fail open - if we can't check IP blocks, allow the request
+      return false;
+    }
   }
 }
