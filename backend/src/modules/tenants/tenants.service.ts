@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
-import { Prisma, TenantStatus } from '@prisma/client';
+import { TenantStatus } from '@prisma/client';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../database/prisma.service';
@@ -63,6 +63,7 @@ export class TenantsService {
   ) {}
 
   private get crm() {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return this.crmPrisma as any;
   }
 

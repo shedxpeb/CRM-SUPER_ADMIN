@@ -110,7 +110,9 @@ export class LoginProtectionService {
       if (row.blockedUntil && isPast(row.blockedUntil)) return false;
       return true;
     } catch (error) {
-      this.logger.error(`Failed to check IP block status: ${error instanceof Error ? error.message : String(error)}`);
+      this.logger.error(
+        `Failed to check IP block status: ${error instanceof Error ? error.message : String(error)}`,
+      );
       // Fail open - if we can't check IP blocks, allow the request
       return false;
     }
