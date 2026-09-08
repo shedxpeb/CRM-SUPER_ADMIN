@@ -1,5 +1,4 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
-const API_PREFIX = '/api/v1';
 export const ACCESS_TOKEN_KEY = 'sa_access_token';
 
 // Fail fast instead of silently pointing the production bundle at localhost.
@@ -54,7 +53,7 @@ async function attemptRefresh(): Promise<string | null> {
     // The refresh token lives in an httpOnly cookie set by the backend;
     // credentials: 'include' sends it automatically. Never store it in
     // localStorage (XSS-safe).
-    const res = await fetch(`${API_URL}${API_PREFIX}/auth/refresh`, {
+    const res = await fetch(`${API_URL}/auth/refresh`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -95,7 +94,7 @@ async function request<T = unknown>(
 
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
-  const res = await fetch(`${API_URL}${API_PREFIX}${endpoint}`, {
+  const res = await fetch(`${API_URL}${endpoint}`, {
     ...options,
     headers,
     credentials: 'include',
