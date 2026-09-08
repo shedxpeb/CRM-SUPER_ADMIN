@@ -2,73 +2,57 @@
 
 Enterprise control plane for the PEB CRM ecosystem: platform administration, tenant lifecycle, organizations, users, roles, permissions, audit logs, and monitoring.
 
-## Deployment Status
+## Deployment
 
-Replace `OWNER/REPO` below with your GitHub organization and repository name (e.g. `acme/BuildX`).
+| App | Platform | Port | PM2 Process |
+| --- | --- | --- | --- |
+| Frontend | Hostinger (Next.js) | 3004 | super-admin-frontend |
+| Backend | Hostinger (NestJS) | 8001 | super-admin-backend |
 
-| App | Platform | Status |
-| --- | --- | --- |
-| Frontend | Vercel | [![Super Admin Frontend](https://github.com/OWNER/REPO/actions/workflows/super-admin-frontend.yml/badge.svg)](https://github.com/OWNER/REPO/actions/workflows/super-admin-frontend.yml) |
-| Backend | Render | [![Super Admin Backend](https://github.com/OWNER/REPO/actions/workflows/super-admin-backend.yml/badge.svg)](https://github.com/OWNER/REPO/actions/workflows/super-admin-backend.yml) |
+Production deployment is managed via PM2 on the Hostinger server. See `PEB-CRM/deploy.sh` and `PEB-CRM/ecosystem.config.js` for deployment details.
 
 ## Repository Layout
 
 ```
 PEB-CRM/SUPER-ADMIN/
-├── frontend/   Next.js 15 (App Router) — Vercel
-├── backend/    NestJS 11 (Fastify) — Render
+├── frontend/   Next.js 15 (App Router)
+├── backend/    NestJS 11 (Fastify)
 └── README.md
 ```
 
-## CI/CD
+## CI
 
-Fully automated GitHub Actions pipelines — no manual deploys.
+GitHub Actions runs validation on every push/PR:
 
-### Frontend → Vercel (`.github/workflows/super-admin-frontend.yml`)
+- `npm ci`
+- `npx prisma generate`
+- `npm run lint:check`
+- `npm run type-check`
+- `npm run build`
+- `npm test -- --passWithNoTests`
 
-Runs on every push/PR touching `PEB-CRM/SUPER-ADMIN/frontend/**`:
+See `.github/workflows/super-admin-backend.yml` and `.github/workflows/super-admin-frontend.yml`.
 
-1. `npm ci`
-2. `npm run lint`
-3. `npm run type-check`
-4. `npm run build`
-5. Deploy to Vercel production on `main`
-6. Health check `GET /health` (public route at `frontend/src/app/health/route.ts`)
+## Production Deployment
 
-Required secrets: `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`, `NEXT_PUBLIC_API_URL`, `VERCEL_DEPLOYMENT_URL`.
+Production runs on Hostinger with PM2:
 
-### Backend → Render (`.github/workflows/super-admin-backend.yml`)
+```bash
+# From PEB-CRM directory on Hostinger server
+pm2 restart super-admin-frontend
+pm2 restart super-admin-backend
+```
 
-Runs on every push/PR touching `PEB-CRM/SUPER-ADMIN/backend/**`:
+⚠️ **NEVER run `pm2 restart all`** — always restart individual services.
 
-1. `npm ci`
-2. `npx prisma generate`
-3. `npm run lint:check`
-4. `npm run type-check`
-5. `npm run build`
-6. `npm test -- --passWithNoTests`
-7. Environment validation (required secrets present)
-8. Trigger Render deploy hook on `main`
-9. Health check `GET /api/v1/health` (polled until the new deploy is live)
-
-Required secrets: `DATABASE_URL`, `CRM_DATABASE_URL`, `JWT_SECRET`, `RENDER_DEPLOY_HOOK_URL`, `RENDER_SERVICE_URL`.
-
-Render service settings:
-
-- Build command: `npm ci && npx prisma generate && npm run build`
-- Start command: `node dist/main`
-- Health check path: `/api/v1/health`
-
-### Render Environment Variables Configuration
-
-Configure these environment variables in your Render service settings:
+## Environment Variables
 
 **Required Environment Variables:**
 - `DATABASE_URL` - PostgreSQL connection string for the platform database
 - `CRM_DATABASE_URL` - PostgreSQL connection string for the CRM database
 - `JWT_SECRET` - Secret key for JWT token signing (use a strong random string)
-- `FRONTEND_URL` - Frontend application URL (e.g., `https://your-frontend.vercel.app`)
-- `ALLOWED_ORIGINS` - Comma-separated list of allowed CORS origins (e.g., `https://your-frontend.vercel.app,https://your-backend.onrender.com`)
+- `FRONTEND_URL` - Frontend application URL (e.g., `https://admin.buildxcrm.com`)
+- `ALLOWED_ORIGINS` - Comma-separated list of allowed CORS origins
 
 **Optional Environment Variables:**
 - `NODE_ENV` - Set to `production` for production deployments
@@ -78,28 +62,16 @@ Configure these environment variables in your Render service settings:
 
 **Example for your deployment (placeholders only — never commit real credentials):**
 ```
-DATABASE_URL=postgresql://<user>:<password>@<host>:5432/<platform-db>?sslmode=require
-CRM_DATABASE_URL=postgresql://<user>:<password>@<host>:5432/<crm-db>?sslmode=require
+DATABASE_URL=postgresql://<user>:<password>@<host>:5432/peb-platform?sslmode=require
+CRM_DATABASE_URL=postgresql://<user>:<password>@<host>:5432/peb-crm?sslmode=require
 JWT_SECRET=<generate-a-random-secret-at-least-32-chars>
-FRONTEND_URL=https://super.example.com
-ALLOWED_ORIGINS=https://super.example.com
+FRONTEND_URL=https://admin.buildxcrm.com
+ALLOWED_ORIGINS=https://admin.buildxcrm.com
 ```
 
-### Vercel Environment Variables Configuration
+## Failure policy
 
-Configure this environment variable in your Vercel project settings:
-
-**Required Environment Variables:**
-- `NEXT_PUBLIC_API_URL` - Backend API URL (e.g., `https://your-backend.onrender.com`)
-
-**Example for your deployment:**
-```
-NEXT_PUBLIC_API_URL=https://crm-super-admin.onrender.com
-```
-
-### Failure policy
-
-Deployment is skipped (CI fails) when lint, type-check, build, tests, or environment validation fail. The post-deploy health check marks the run failed if the service does not come up healthy.
+CI fails when lint, type-check, build, tests, or environment validation fail.
 
 ## Branch Protection (enable in GitHub repo settings)
 
