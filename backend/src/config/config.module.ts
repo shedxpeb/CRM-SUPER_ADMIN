@@ -39,7 +39,7 @@ const logger = new Logger('ConfigModule');
       validate: (config) => {
         try {
           applyConfigToProcessEnv(config);
-          validateEnv(config);
+          validateEnv();
           logger.log('Environment validation passed');
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
