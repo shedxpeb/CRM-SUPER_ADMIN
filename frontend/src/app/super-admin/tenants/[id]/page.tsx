@@ -568,12 +568,11 @@ export default function TenantDetailPage() {
         <Dialog open onOpenChange={() => setDeleteUser(null)}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Delete User</DialogTitle>
+              <DialogTitle>Permanently delete this user?</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 pt-2">
               <p className="text-sm text-sa-text-muted">
-                Are you sure you want to delete <strong className="text-sa-text">{deleteUser.name ?? deleteUser.email}</strong>?
-                This will deactivate the user and revoke all active sessions.
+                This action permanently removes the user from the database and cannot be undone.
               </p>
               <div className="flex justify-end gap-2">
                 <Button variant="ghost" onClick={() => setDeleteUser(null)}>Cancel</Button>
@@ -585,7 +584,7 @@ export default function TenantDetailPage() {
                     setDeleteUser(null);
                   }}
                 >
-                  {deleteUserMutation.isPending ? 'Deleting…' : 'Delete User'}
+                  {deleteUserMutation.isPending ? 'Deleting…' : 'Delete Permanently'}
                 </Button>
               </div>
             </div>
@@ -614,9 +613,11 @@ function AddTenantUserDialog({
   const [password, setPassword] = useState('');
   const [role, setRole] = useState('');
   const [submitted, setSubmitted] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
 
   const handleCreate = async () => {
     setSubmitted(true);
+    setErrorMessage('');
     if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return;
     try {
       await createUser.mutateAsync({
@@ -630,6 +631,15 @@ function AddTenantUserDialog({
       });
       onClose();
     } catch (e) {
+      // Extract error message from the response
+      let message = 'Failed to create user. Check for duplicate emails or missing assignable roles.';
+      if (e && typeof e === 'object' && 'response' in e) {
+        const response = e.response as { data?: { message?: string }; status?: number };
+        if (response.status === 409 && response.data?.message) {
+          message = response.data.message;
+        }
+      }
+      setErrorMessage(message);
       onError(e);
     }
   };
@@ -682,7 +692,7 @@ function AddTenantUserDialog({
               </select>
             </div>
           )}
-          {createUser.isError && <p className="text-xs text-red-400">Failed to create user. Check for duplicate emails or missing assignable roles.</p>}
+          {errorMessage && <p className="text-xs text-red-400">{errorMessage}</p>}
           <div className="flex justify-end gap-2">
             <Button variant="ghost" onClick={onClose}>Cancel</Button>
             <Button disabled={createUser.isPending} onClick={handleCreate} className="gap-2">

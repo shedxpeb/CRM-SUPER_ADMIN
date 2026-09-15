@@ -138,7 +138,7 @@ export class TenantOpsController {
 
   @Delete('users/:userId')
   @RequirePermissions('users:manage')
-  @ApiOperation({ summary: 'Soft-delete a CRM user for a tenant' })
+  @ApiOperation({ summary: 'Permanently delete a CRM user for a tenant' })
   deleteUser(
     @Param('id') id: string,
     @Param('userId') userId: string,

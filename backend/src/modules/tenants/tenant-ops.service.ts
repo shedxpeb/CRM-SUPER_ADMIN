@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { Prisma as PrismaCrm, CrmUserRole } from '@prisma/client-crm';
+import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { PrismaService } from '../../database/prisma.service';
 import { CrmPrismaService } from '../../database/crm-prisma.service';
 import { AuditService } from '../auth/services/audit.service';
@@ -367,10 +368,19 @@ export class TenantOpsService {
   ) {
     const tenant = await ensureTenant(this.prisma, tenantId);
 
-    const existing = await this.crm.user.findFirst({
-      where: { email: dto.email, isDeleted: false },
+    // Normalize email first
+    const normalizedEmail = dto.email.toLowerCase().trim();
+
+    // Check if user already exists (hard delete means no soft-deleted users to restore)
+    const existingUser = await this.crm.user.findFirst({
+      where: {
+        email: normalizedEmail,
+      },
     });
-    if (existing) throw new ConflictException('A user with this email already exists');
+
+    if (existingUser) {
+      throw new ConflictException('A user with this email already exists');
+    }
 
     const roleCode = dto.role?.toUpperCase() || DEFAULT_CRM_ROLE;
     // No auto-generated password. If the operator supplied one it is set
@@ -378,65 +388,73 @@ export class TenantOpsService {
     // own password through the CRM OTP (forgot-password) flow.
     const password = dto.password ?? crypto.randomUUID();
 
-    const user = await this.crm.user.create({
-      data: {
-        email: dto.email.toLowerCase().trim(),
-        name: dto.name,
-        mobile: dto.mobile,
-        department: dto.department,
-        designation: dto.designation,
-        role: toCrmUserRole(roleCode),
-        organizationId: tenant.crmOrganizationId,
-        password: await bcrypt.hash(password, 10),
-        isActive: dto.isActive ?? true,
-        isVerified: true,
-        mustChangePassword: false,
-        version: 1,
-      },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true,
-        isActive: true,
-        createdAt: true,
-      },
-    });
-
-    // Link the user to the matching system role so the CRM RBAC resolver
-    // (which reads effective permissions via UserRole) grants access.
-    const systemRole = await this.crm.role.findFirst({
-      where: {
-        organizationId: tenant.crmOrganizationId,
-        code: roleCode,
-        isSystem: true,
-        isDeleted: false,
-      },
-    });
-    if (systemRole) {
-      await this.crm.userRoleAssignment.create({
+    try {
+      const user = await this.crm.user.create({
         data: {
-          userId: user.id,
-          roleId: systemRole.id,
+          email: normalizedEmail,
+          name: dto.name,
+          mobile: dto.mobile,
+          department: dto.department,
+          designation: dto.designation,
+          role: toCrmUserRole(roleCode),
           organizationId: tenant.crmOrganizationId,
-          assignedById: actor.id,
-          assignedAt: new Date(),
+          password: await bcrypt.hash(password, 10),
+          isActive: dto.isActive ?? true,
+          isVerified: true,
+          mustChangePassword: false,
+          version: 1,
+        },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          role: true,
+          isActive: true,
+          createdAt: true,
         },
       });
+
+      // Link the user to the matching system role so the CRM RBAC resolver
+      // (which reads effective permissions via UserRole) grants access.
+      const systemRole = await this.crm.role.findFirst({
+        where: {
+          organizationId: tenant.crmOrganizationId,
+          code: roleCode,
+          isSystem: true,
+          isDeleted: false,
+        },
+      });
+      if (systemRole) {
+        await this.crm.userRoleAssignment.create({
+          data: {
+            userId: user.id,
+            roleId: systemRole.id,
+            organizationId: tenant.crmOrganizationId,
+            assignedById: actor.id,
+            assignedAt: new Date(),
+          },
+        });
+      }
+
+      await this.auditService.record({
+        actorId: actor.id,
+        actorEmail: actor.email,
+        action: 'tenant.user.create',
+        targetType: 'User',
+        targetId: user.id,
+        targetName: user.email,
+        tenantId,
+        metadata: { email: user.email, role: user.role, passwordSet: !!dto.password },
+      });
+
+      return user;
+    } catch (error) {
+      // Handle race conditions - catch P2002 unique constraint errors
+      if (error instanceof PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new ConflictException('A user with this email already exists');
+      }
+      throw error;
     }
-
-    await this.auditService.record({
-      actorId: actor.id,
-      actorEmail: actor.email,
-      action: 'tenant.user.create',
-      targetType: 'User',
-      targetId: user.id,
-      targetName: user.email,
-      tenantId,
-      metadata: { email: user.email, role: user.role, passwordSet: !!dto.password },
-    });
-
-    return user;
   }
 
   async updateTenantUser(
@@ -628,32 +646,19 @@ export class TenantOpsService {
     });
     if (!user) throw new NotFoundException('Tenant user not found');
 
-    // Soft-delete the user and revoke all active sessions
+    // Hard delete the user - Prisma cascades will handle related records:
+    // - Session, RefreshToken, UserRoleAssignment, UserPermission, UserModuleAccess (all have onDelete: Cascade)
+    // - AuditLog keeps userId as nullable reference (audit trail preserved)
     await this.crm.$transaction([
-      this.crm.user.update({
+      this.crm.user.delete({
         where: { id: userId },
-        data: {
-          isDeleted: true,
-          deletedAt: new Date(),
-          deletedById: actor.id,
-          isActive: false,
-          version: { increment: 1 },
-        },
-      }),
-      this.crm.session.updateMany({
-        where: { userId, isRevoked: false },
-        data: { isRevoked: true, revokedAt: new Date() },
-      }),
-      this.crm.refreshToken.updateMany({
-        where: { userId, isRevoked: false },
-        data: { isRevoked: true, revokedAt: new Date() },
       }),
     ]);
 
     await this.auditService.record({
       actorId: actor.id,
       actorEmail: actor.email,
-      action: 'tenant.user.soft_delete',
+      action: 'tenant.user.delete',
       targetType: 'User',
       targetId: userId,
       targetName: user.email,
@@ -661,7 +666,7 @@ export class TenantOpsService {
       severity: 'WARNING',
     });
 
-    return { success: true, message: 'User deleted' };
+    return { success: true, message: 'User permanently deleted' };
   }
 
   async getTenantUserRoles(tenantId: string, userId: string) {

@@ -266,6 +266,10 @@ export function useCreateTenantUser() {
     onSuccess: (_data, { id }) => {
       qc.invalidateQueries({ queryKey: ['tenants', id, 'users'] });
     },
+    onError: (error) => {
+      // Let the component handle error display
+      console.error('Failed to create tenant user:', error);
+    },
   });
 }
 
