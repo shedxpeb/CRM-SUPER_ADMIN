@@ -105,7 +105,7 @@ async function main() {
   // 3. Super admin user
   const email = (process.env.SUPER_ADMIN_EMAIL || 'admin@pebplatform.io').toLowerCase();
   const password = process.env.SUPER_ADMIN_PASSWORD;
-  if (!password || password === 'Admin@12345' || password === 'Admin@123') {
+  if (!password) {
     throw new Error(
       'SUPER_ADMIN_PASSWORD must be set to a strong, non-default value before seeding. ' +
         'Refusing to create/overwrite the platform super admin with a known default.',

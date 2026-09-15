@@ -27,6 +27,14 @@ import {
   UserPlus,
   RefreshCw,
   Trash2,
+  Search,
+  ChevronDown,
+  ChevronUp,
+  Eye,
+  Plus,
+  Pencil,
+  RotateCcw,
+  CheckCircle,
 } from 'lucide-react';
 import { PageHeader, LoadingState, ErrorState } from '@/components/sa/PageHeader';
 import { StatusBadge } from '@/components/sa/StatusBadge';
@@ -57,7 +65,6 @@ import {
   useAssignTenantUserRole,
   useRemoveTenantUserRoles,
   useEffectivePermissions,
-  useUserPermissions,
   useSetUserPermissions,
   useUserModules,
   useSetUserModules,
@@ -67,6 +74,7 @@ import { Can } from '@/features/auth/rbac';
 import { RouteGuard } from '@/features/auth/RouteGuard';
 import { formatDate, formatNumber, formatBytes, timeAgo } from '@/lib/format';
 import { cn, normalizeModuleKey } from '@/lib/utils';
+import { getPermissionMetadata, getModuleDisplayName, type PermissionMetadata } from '@/lib/permissionMetadata';
 import { DataTable, Pagination } from '@/components/sa/DataTable';
 import type { ColumnDef } from '@tanstack/react-table';
 import type { TenantActivityEntry, AuditLogEntry, TenantUser, TenantRole } from '@/lib/types';
@@ -1212,7 +1220,6 @@ function EffectivePermissionsView({ tenantId, userId }: { tenantId: string; user
 
   const effectiveGroups = groupByModule(data.effectivePermissions);
   const roleGroups = groupByModule(data.rolePermissions);
-  const overrideKeys = new Set(data.userOverrides.map((o) => o.key));
 
   return (
     <div className="space-y-4">
@@ -1315,6 +1322,10 @@ function UserOverridesEditor({ tenantId, userId }: { tenantId: string; userId: s
   const [granted, setGranted] = useState<Set<string>>(new Set());
   const [denied, setDenied] = useState<Set<string>>(new Set());
   const [showSaved, setShowSaved] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filter, setFilter] = useState<'all' | 'in-role' | 'not-in-role' | 'has-override'>('all');
+  const [expandedModules, setExpandedModules] = useState<Set<string>>(new Set());
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   useEffect(() => {
     if (ep.data) {
@@ -1370,106 +1381,360 @@ function UserOverridesEditor({ tenantId, userId }: { tenantId: string; userId: s
     setTimeout(() => setShowSaved(false), 3000);
   };
 
+  const handleClearAll = () => {
+    setGranted(new Set());
+    setDenied(new Set());
+    setShowSaved(false);
+    setShowClearConfirm(false);
+  };
+
+  const toggleModule = (modKey: string) => {
+    setExpandedModules((prev) => {
+      const next = new Set(prev);
+      if (next.has(modKey)) next.delete(modKey);
+      else next.add(modKey);
+      return next;
+    });
+  };
+
+  const expandAll = () => {
+    setExpandedModules(new Set(Object.keys(groups)));
+  };
+
+  const collapseAll = () => {
+    setExpandedModules(new Set());
+  };
+
   // Count active overrides
   const overrideCount = granted.size + denied.size;
 
+  // Filter and search permissions
+  const filteredGroups: Record<string, string[]> = {};
+  for (const [modKey, perms] of Object.entries(groups)) {
+    const filteredPerms = perms.filter((perm) => {
+      const metadata = getPermissionMetadata(perm);
+      const inRole = rolePerms.has(perm);
+      const hasOverride = granted.has(perm) || denied.has(perm);
+      
+      // Apply filter
+      if (filter === 'in-role' && !inRole) return false;
+      if (filter === 'not-in-role' && inRole) return false;
+      if (filter === 'has-override' && !hasOverride) return false;
+      
+      // Apply search
+      if (searchQuery) {
+        const query = searchQuery.toLowerCase();
+        const matchesModule = metadata.module.toLowerCase().includes(query);
+        const matchesLabel = metadata.label.toLowerCase().includes(query);
+        const matchesCode = perm.toLowerCase().includes(query);
+        if (!matchesModule && !matchesLabel && !matchesCode) return false;
+      }
+      
+      return true;
+    });
+    
+    if (filteredPerms.length > 0) {
+      filteredGroups[modKey] = filteredPerms;
+    }
+  }
+
+  // Calculate module summaries
+  const getModuleSummary = (modKey: string, perms: string[]) => {
+    const inRoleCount = perms.filter(p => rolePerms.has(p)).length;
+    const overrideCount = perms.filter(p => granted.has(p) || denied.has(p)).length;
+    return {
+      total: perms.length,
+      inRole: inRoleCount,
+      notInRole: perms.length - inRoleCount,
+      overrides: overrideCount,
+    };
+  };
+
+  // Action icon component
+  const ActionIcon = ({ action }: { action: PermissionMetadata['action'] }) => {
+    const icons = {
+      View: <Eye className="h-3 w-3" />,
+      Create: <Plus className="h-3 w-3" />,
+      Edit: <Pencil className="h-3 w-3" />,
+      Delete: <Trash2 className="h-3 w-3" />,
+      Restore: <RotateCcw className="h-3 w-3" />,
+      Approve: <CheckCircle className="h-3 w-3" />,
+      Other: <Key className="h-3 w-3" />,
+    };
+    return icons[action] || icons.Other;
+  };
+
   return (
     <div className="space-y-4">
-      <div className="flex items-start gap-2 p-3 rounded-lg bg-sa-chart-bg border border-sa-border">
-        <AlertCircle className="h-4 w-4 text-sa-accent mt-0.5" />
-        <div>
-          <p className="text-xs text-sa-text-muted">
-            These are <strong className="text-sa-text">explicit exceptions</strong> to the user&apos;s role permissions.
-            Leave all overrides empty to use the role defaults.
-          </p>
-          <p className="text-xs text-sa-text-dim mt-1">
-            <strong>Grant</strong> = add permission not in role · <strong>Deny</strong> = remove permission from role
-          </p>
+      {/* Explanation header */}
+      <div className="p-4 rounded-lg bg-sa-chart-bg border border-sa-border">
+        <div className="flex items-start gap-2 mb-3">
+          <AlertCircle className="h-4 w-4 text-sa-accent mt-0.5 shrink-0" />
+          <div>
+            <p className="text-sm text-sa-text-muted">
+              <strong className="text-sa-text">User Overrides</strong> are exceptions to this user&apos;s role permissions.
+            </p>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+          <div className="p-2 rounded bg-sa-card-solid border border-sa-border">
+            <p className="font-semibold text-sa-text mb-1">No Override</p>
+            <p className="text-sa-text-dim">Uses the role&apos;s default permission.</p>
+          </div>
+          <div className="p-2 rounded bg-sa-card-solid border border-sa-border">
+            <p className="font-semibold text-green-500 mb-1">Grant</p>
+            <p className="text-sa-text-dim">Allows this permission even if the role does not include it.</p>
+          </div>
+          <div className="p-2 rounded bg-sa-card-solid border border-sa-border">
+            <p className="font-semibold text-red-400 mb-1">Deny</p>
+            <p className="text-sa-text-dim">Blocks this permission even if the role includes it.</p>
+          </div>
         </div>
       </div>
 
-      <div className="rounded-lg border border-sa-border overflow-hidden">
-        {Object.keys(groups).sort().map((modKey, idx) => (
-          <div key={modKey} className={idx > 0 ? 'border-t border-sa-border' : ''}>
-            <div className="px-3 py-2 bg-sa-card-solid">
-              <span className="text-xs font-semibold text-sa-text-secondary uppercase tracking-wider capitalize">
-                {modKey.replace(/-/g, ' ')}
-              </span>
-            </div>
-            <div className="px-3 py-2 grid grid-cols-1 sm:grid-cols-2 gap-1">
-              {groups[modKey].map((perm) => {
-                const inRole = rolePerms.has(perm);
-                return (
-                  <div key={perm} className="flex items-center justify-between gap-2 px-2 py-1 rounded-md hover:bg-sa-chart-bg">
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <span className="text-xs font-mono text-sa-text-secondary truncate">{perm}</span>
-                      {inRole ? (
-                        <span className="text-[10px] text-sa-text-dim shrink-0">(in role)</span>
-                      ) : (
-                        <span className="text-[10px] text-sa-text-dim shrink-0">(not in role)</span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1 shrink-0">
-                      <button
-                        onClick={() => toggle(perm, 'grant')}
-                        className={cn(
-                          'px-2 py-0.5 rounded text-[10px] font-medium border transition-colors',
-                          granted.has(perm)
-                            ? 'border-green-500/50 bg-green-500/10 text-green-500'
-                            : 'border-sa-border text-sa-text-muted hover:border-green-500/40',
-                        )}
-                      >
-                        Grant
-                      </button>
-                      <button
-                        onClick={() => toggle(perm, 'deny')}
-                        className={cn(
-                          'px-2 py-0.5 rounded text-[10px] font-medium border transition-colors',
-                          denied.has(perm)
-                            ? 'border-red-500/50 bg-red-500/10 text-red-400'
-                            : 'border-sa-border text-sa-text-muted hover:border-red-500/40',
-                        )}
-                      >
-                        Deny
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        ))}
+      {/* Search and filters */}
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-sa-text-dim" />
+          <Input
+            placeholder="Search permissions..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-9 text-sm"
+          />
+        </div>
+        <div className="flex gap-1">
+          {(['all', 'in-role', 'not-in-role', 'has-override'] as const).map((f) => (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              className={cn(
+                'px-3 py-1.5 rounded-md text-xs font-medium border transition-colors',
+                filter === f
+                  ? 'bg-sa-accent text-white border-sa-accent'
+                  : 'border-sa-border text-sa-text-muted hover:border-sa-accent hover:text-sa-accent',
+              )}
+            >
+              {f === 'all' && 'All'}
+              {f === 'in-role' && 'In Role'}
+              {f === 'not-in-role' && 'Not in Role'}
+              {f === 'has-override' && 'Has Override'}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {save.isError && <p className="text-xs text-red-400">Failed to save overrides.</p>}
-      {showSaved && <p className="text-xs text-green-500">Overrides saved successfully.</p>}
+      {/* Expand/Collapse All */}
+      <div className="flex items-center gap-2 text-xs">
+        <button
+          onClick={expandAll}
+          className="text-sa-text-muted hover:text-sa-accent transition-colors"
+        >
+          Expand All
+        </button>
+        <span className="text-sa-text-dim">·</span>
+        <button
+          onClick={collapseAll}
+          className="text-sa-text-muted hover:text-sa-accent transition-colors"
+        >
+          Collapse All
+        </button>
+      </div>
 
-      {overrideCount === 0 && (
-        <p className="text-xs text-sa-text-dim text-center py-2">
-          No overrides set — user inherits all role permissions.
-        </p>
-      )}
+      {/* Permission modules */}
+      <div className="rounded-lg border border-sa-border overflow-hidden">
+        {Object.keys(filteredGroups).length === 0 ? (
+          <div className="p-8 text-center">
+            <p className="text-sm text-sa-text-muted">No permissions match your search or filter.</p>
+          </div>
+        ) : (
+          Object.keys(filteredGroups).sort().map((modKey, idx) => {
+            const perms = filteredGroups[modKey];
+            const summary = getModuleSummary(modKey, perms);
+            const isExpanded = expandedModules.has(modKey);
+            const moduleDisplayName = getModuleDisplayName(modKey);
 
-      <div className="flex justify-end gap-2">
-        {overrideCount > 0 && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="gap-1.5 text-sa-text-muted"
-            onClick={() => { setGranted(new Set()); setDenied(new Set()); setShowSaved(false); }}
-          >
-            Clear All Overrides
-          </Button>
+            return (
+              <div key={modKey} className={idx > 0 ? 'border-t border-sa-border' : ''}>
+                {/* Module header */}
+                <button
+                  onClick={() => toggleModule(modKey)}
+                  className="w-full px-4 py-3 bg-sa-card-solid hover:bg-sa-chart-bg transition-colors flex items-center justify-between"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm font-semibold text-sa-text-secondary uppercase tracking-wider">
+                      {moduleDisplayName}
+                    </span>
+                    <span className="text-xs text-sa-text-dim">
+                      {summary.total} permissions · {summary.inRole} in role · {summary.overrides} override{summary.overrides !== 1 ? 's' : ''}
+                    </span>
+                  </div>
+                  {isExpanded ? (
+                    <ChevronUp className="h-4 w-4 text-sa-text-dim" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4 text-sa-text-dim" />
+                  )}
+                </button>
+
+                {/* Permission rows */}
+                {isExpanded && (
+                  <div className="divide-y divide-sa-border">
+                    {perms.map((perm) => {
+                      const metadata = getPermissionMetadata(perm);
+                      const inRole = rolePerms.has(perm);
+                      const isGranted = granted.has(perm);
+                      const isDenied = denied.has(perm);
+                      const hasOverride = isGranted || isDenied;
+
+                      return (
+                        <div key={perm} className="p-4 hover:bg-sa-chart-bg transition-colors">
+                          <div className="flex flex-col lg:flex-row lg:items-center gap-3">
+                            {/* Permission info */}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1">
+                                <ActionIcon action={metadata.action} />
+                                <span className="text-sm font-medium text-sa-text">
+                                  {metadata.label}
+                                </span>
+                              </div>
+                              <p className="text-xs text-sa-text-dim">{metadata.description}</p>
+                            </div>
+
+                            {/* Role status */}
+                            <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-sa-card-solid border border-sa-border shrink-0">
+                              {inRole ? (
+                                <>
+                                  <CheckCircle className="h-3 w-3 text-green-500" />
+                                  <span className="text-xs text-sa-text-muted">Included in Role</span>
+                                </>
+                              ) : (
+                                <>
+                                  <XCircle className="h-3 w-3 text-sa-text-dim" />
+                                  <span className="text-xs text-sa-text-dim">Not Included</span>
+                                </>
+                              )}
+                            </div>
+
+                            {/* Override controls */}
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button
+                                onClick={() => toggle(perm, 'grant')}
+                                className={cn(
+                                  'px-3 py-1.5 rounded-md text-xs font-medium border transition-colors',
+                                  !hasOverride && !isGranted
+                                    ? 'border-sa-border text-sa-text-muted hover:border-green-500/40 hover:text-green-500'
+                                    : isGranted
+                                      ? 'border-green-500/50 bg-green-500/10 text-green-500'
+                                      : 'border-sa-border text-sa-text-muted opacity-50',
+                                )}
+                                disabled={isDenied}
+                              >
+                                Grant
+                              </button>
+                              <button
+                                onClick={() => toggle(perm, 'deny')}
+                                className={cn(
+                                  'px-3 py-1.5 rounded-md text-xs font-medium border transition-colors',
+                                  !hasOverride && !isDenied
+                                    ? 'border-sa-border text-sa-text-muted hover:border-red-500/40 hover:text-red-400'
+                                    : isDenied
+                                      ? 'border-red-500/50 bg-red-500/10 text-red-400'
+                                      : 'border-sa-border text-sa-text-muted opacity-50',
+                                )}
+                                disabled={isGranted}
+                              >
+                                Deny
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Override indicator */}
+                          {hasOverride && (
+                            <div className="mt-2 flex items-center gap-2">
+                              <span className="text-xs font-medium text-sa-accent">
+                                Override Active: {isGranted ? 'GRANTED' : 'DENIED'}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })
         )}
-        <Button disabled={!dirty || save.isPending} onClick={handleSave} className="gap-1.5">
-          <Save className="h-3.5 w-3.5" />
-          {save.isPending ? 'Saving…' : 'Save Overrides'}
-        </Button>
+      </div>
+
+      {/* Save and clear actions */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-4 border-t border-sa-border">
+        <div className="flex flex-col gap-1">
+          {save.isError && <p className="text-xs text-red-400">Failed to save overrides.</p>}
+          {showSaved && <p className="text-xs text-green-500">Permission overrides saved successfully.</p>}
+          {overrideCount === 0 && (
+            <p className="text-xs text-sa-text-dim">
+              No overrides set — user inherits all role permissions.
+            </p>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2">
+          {overrideCount > 0 && (
+            <>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="gap-1.5 text-sa-text-muted"
+                onClick={() => setShowClearConfirm(true)}
+              >
+                Clear All Overrides
+              </Button>
+              
+              {/* Confirmation dialog */}
+              {showClearConfirm && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                  <div className="bg-sa-card border border-sa-border rounded-lg p-6 max-w-md mx-4">
+                    <h3 className="text-sm font-semibold text-sa-text mb-2">Clear all overrides?</h3>
+                    <p className="text-xs text-sa-text-muted mb-4">
+                      This will remove all explicit permission overrides for this user and restore the role defaults.
+                    </p>
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setShowClearConfirm(false)}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={handleClearAll}
+                      >
+                        Clear Overrides
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+          <Button
+            disabled={!dirty || save.isPending}
+            onClick={handleSave}
+            className="gap-1.5"
+          >
+            <Save className="h-3.5 w-3.5" />
+            {save.isPending ? 'Saving…' : 'Save Overrides'}
+          </Button>
+        </div>
       </div>
     </div>
   );
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function UserModuleAccessEditor({ tenantId, userId }: { tenantId: string; userId: string }) {
   const catalog = useModuleCatalog();
   const overrides = useUserModules(tenantId, userId);
