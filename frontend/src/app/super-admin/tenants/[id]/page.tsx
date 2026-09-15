@@ -60,6 +60,7 @@ import {
   useCreateTenantRole,
   useModuleCatalog,
   usePermissionCatalog,
+  useManageablePermissionCatalog,
   useSetTenantRolePermissions,
   useUserRoles,
   useAssignTenantUserRole,
@@ -1326,7 +1327,7 @@ function EffectivePermissionsView({ tenantId, userId }: { tenantId: string; user
 //   - Overrides only modify exceptions
 //   - Effective = role ± overrides
 function UserOverridesEditor({ tenantId, userId }: { tenantId: string; userId: string }) {
-  const catalog = usePermissionCatalog(tenantId);
+  const catalog = useManageablePermissionCatalog(tenantId);
   const ep = useEffectivePermissions(tenantId, userId);
   const save = useSetUserPermissions();
   const [granted, setGranted] = useState<Set<string>>(new Set());
@@ -1357,6 +1358,9 @@ function UserOverridesEditor({ tenantId, userId }: { tenantId: string; userId: s
 
   const groups = catalog.data ?? {};
   const rolePerms = new Set(ep.data?.rolePermissions ?? []);
+
+  // Check if any manageable permissions exist
+  const hasManageablePermissions = Object.keys(groups).length > 0;
 
   const dirty = ep.data !== undefined && (
     granted.size !== ep.data.userOverrides.filter((o) => o.type === 'granted').length ||
@@ -1484,6 +1488,9 @@ function UserOverridesEditor({ tenantId, userId }: { tenantId: string; userId: s
             <p className="text-sm text-sa-text-muted">
               <strong className="text-sa-text">User Overrides</strong> are exceptions to this user&apos;s role permissions.
             </p>
+            <p className="text-xs text-sa-text-dim mt-1">
+              Only permissions you are authorized to manage are shown below.
+            </p>
           </div>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
@@ -1502,72 +1509,90 @@ function UserOverridesEditor({ tenantId, userId }: { tenantId: string; userId: s
         </div>
       </div>
 
-      {/* Search and filters */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-sa-text-dim" />
-          <Input
-            placeholder="Search permissions..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9 text-sm"
-          />
-        </div>
-        <div className="flex gap-1">
-          {(['all', 'in-role', 'not-in-role', 'has-override'] as const).map((f) => (
-            <button
-              key={f}
-              onClick={() => setFilter(f)}
-              className={cn(
-                'px-3 py-1.5 rounded-md text-xs font-medium border transition-colors',
-                filter === f
-                  ? 'bg-sa-accent text-white border-sa-accent'
-                  : 'border-sa-border text-sa-text-muted hover:border-sa-accent hover:text-sa-accent',
-              )}
-            >
-              {f === 'all' && 'All'}
-              {f === 'in-role' && 'In Role'}
-              {f === 'not-in-role' && 'Not in Role'}
-              {f === 'has-override' && 'Has Override'}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Expand/Collapse All */}
-      <div className="flex items-center gap-2 text-xs">
-        <button
-          onClick={expandAll}
-          className="text-sa-text-muted hover:text-sa-accent transition-colors"
-        >
-          Expand All
-        </button>
-        <span className="text-sa-text-dim">·</span>
-        <button
-          onClick={collapseAll}
-          className="text-sa-text-muted hover:text-sa-accent transition-colors"
-        >
-          Collapse All
-        </button>
-      </div>
-
-      {/* Permission modules */}
-      <div className="rounded-lg border border-sa-border overflow-hidden">
-        {Object.keys(filteredGroups).length === 0 ? (
-          <div className="p-8 text-center">
-            <p className="text-sm text-sa-text-muted">No permissions match your search or filter.</p>
+      {/* No manageable permissions message */}
+      {!hasManageablePermissions && (
+        <div className="p-6 rounded-lg border border-amber-500/30 bg-amber-500/5">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="h-5 w-5 text-amber-400 mt-0.5 shrink-0" />
+            <div>
+              <p className="text-sm font-medium text-amber-400">No Manageable Permissions</p>
+              <p className="text-xs text-sa-text-muted mt-1">
+                You do not have permission to manage user overrides. Contact your administrator if you need this capability.
+              </p>
+            </div>
           </div>
-        ) : (
-          Object.keys(filteredGroups).sort().map((modKey, idx) => {
-            const perms = filteredGroups[modKey];
-            const summary = getModuleSummary(modKey, perms);
-            const isExpanded = expandedModules.has(modKey);
-            const moduleDisplayName = getModuleDisplayName(modKey);
+        </div>
+      )}
 
-            return (
-              <div key={modKey} className={idx > 0 ? 'border-t border-sa-border' : ''}>
-                {/* Module header */}
+      {/* Permission management UI - only show if there are manageable permissions */}
+      {hasManageablePermissions && (
+        <>
+          {/* Search and filters */}
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-sa-text-dim" />
+              <Input
+                placeholder="Search permissions..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9 text-sm"
+              />
+            </div>
+            <div className="flex gap-1">
+              {(['all', 'in-role', 'not-in-role', 'has-override'] as const).map((f) => (
                 <button
+                  key={f}
+                  onClick={() => setFilter(f)}
+                  className={cn(
+                    'px-3 py-1.5 rounded-md text-xs font-medium border transition-colors',
+                    filter === f
+                      ? 'bg-sa-accent text-white border-sa-accent'
+                      : 'border-sa-border text-sa-text-muted hover:border-sa-accent hover:text-sa-accent',
+                  )}
+                >
+                  {f === 'all' && 'All'}
+                  {f === 'in-role' && 'In Role'}
+                  {f === 'not-in-role' && 'Not in Role'}
+                  {f === 'has-override' && 'Has Override'}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Expand/Collapse All */}
+          <div className="flex items-center gap-2 text-xs">
+            <button
+              onClick={expandAll}
+              className="text-sa-text-muted hover:text-sa-accent transition-colors"
+            >
+              Expand All
+            </button>
+            <span className="text-sa-text-dim">·</span>
+            <button
+              onClick={collapseAll}
+              className="text-sa-text-muted hover:text-sa-accent transition-colors"
+            >
+              Collapse All
+            </button>
+          </div>
+
+          {/* Permission modules */}
+          <div className="rounded-lg border border-sa-border overflow-hidden">
+            {Object.keys(filteredGroups).length === 0 ? (
+              <div className="p-8 text-center">
+                <p className="text-sm text-sa-text-muted">No permissions match your search or filter.</p>
+              </div>
+            ) : (
+              Object.keys(filteredGroups).sort().map((modKey, idx) => {
+                const perms = filteredGroups[modKey];
+                const summary = getModuleSummary(modKey, perms);
+                const isExpanded = expandedModules.has(modKey);
+                const moduleDisplayName = getModuleDisplayName(modKey);
+
+                return (
+                  <div key={modKey} className={idx > 0 ? 'border-t border-sa-border' : ''}>
+                    {/* Module header */}
+                    <button
                   onClick={() => toggleModule(modKey)}
                   className="w-full px-4 py-3 bg-sa-card-solid hover:bg-sa-chart-bg transition-colors flex items-center justify-between"
                 >
@@ -1740,6 +1765,8 @@ function UserOverridesEditor({ tenantId, userId }: { tenantId: string; userId: s
           </Button>
         </div>
       </div>
+        </>
+      )}
     </div>
   );
 }

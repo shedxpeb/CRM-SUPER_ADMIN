@@ -203,7 +203,7 @@ export class TenantOpsController {
   }
 
   @Put('users/:userId/permissions')
-  @RequirePermissions('users:update')
+  @RequirePermissions('permissions:manage')
   @ApiOperation({ summary: "Set a CRM user's direct permission overrides (granted/denied list)" })
   setUserPermissions(
     @Param('id') id: string,
@@ -339,6 +339,16 @@ export class TenantOpsController {
   @ApiOperation({ summary: 'Get the full CRM permission catalog grouped by module' })
   getPermissionCatalog() {
     return this.tenantOpsService.getPermissionCatalog();
+  }
+
+  @Get('permissions/manageable')
+  @RequirePermissions('permissions:read')
+  @ApiOperation({ summary: 'Get the manageable permission catalog for the current administrator' })
+  getManageablePermissions(@Param('id') id: string, @CurrentUser() actor: CurrentUser) {
+    return this.tenantOpsService.getManageablePermissionCatalog(id, {
+      id: actor.id,
+      email: actor.email,
+    });
   }
 
   @Get('login-history')

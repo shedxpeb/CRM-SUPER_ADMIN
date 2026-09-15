@@ -188,6 +188,11 @@ export async function getTenantUserRoles(id: string, userId: string): Promise<{ 
   return res.data;
 }
 
+export async function getManageablePermissionCatalog(id: string): Promise<Record<string, string[]>> {
+  const res = await api.get<Record<string, string[]>>(`/tenants/${id}/permissions/manageable`);
+  return res.data;
+}
+
 export async function assignTenantUserRole(
   id: string,
   userId: string,

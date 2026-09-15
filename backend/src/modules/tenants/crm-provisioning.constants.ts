@@ -170,6 +170,14 @@ export const CRM_PERMISSION_CATALOG: Record<string, string[]> = {
     'purchase-order:delete',
     'purchase-order:approve',
   ],
+  finance: [
+    'finance:list',
+    'finance:read',
+    'finance:create',
+    'finance:update',
+    'finance:delete',
+    'finance:approve',
+  ],
   user: ['user:list', 'user:read', 'user:create', 'user:update', 'user:delete'],
   role: ['role:list', 'role:read', 'role:create', 'role:update', 'role:delete'],
   organization: [
