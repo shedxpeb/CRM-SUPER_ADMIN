@@ -17,6 +17,7 @@ import {
   UpdateTenantRoleDto,
   UpdateTenantUserDto,
 } from './dto/tenant-crm.dto';
+import { SetTenantPermissionPoolDto } from './dto/tenant-permission-pool.dto';
 
 @ApiTags('tenants')
 @Controller('tenants/:id')
@@ -166,10 +167,7 @@ export class TenantOpsController {
     @Body() dto: AssignTenantUserRoleDto,
     @CurrentUser() actor: CurrentUser,
   ) {
-    return this.tenantOpsService.assignTenantUserRole(id, userId, dto, {
-      id: actor.id,
-      email: actor.email,
-    });
+    return this.tenantOpsService.assignTenantUserRole(id, userId, dto, actor);
   }
 
   @Delete('users/:userId/roles')
@@ -211,10 +209,7 @@ export class TenantOpsController {
     @Body() dto: SetTenantUserPermissionsDto,
     @CurrentUser() actor: CurrentUser,
   ) {
-    return this.tenantOpsService.setTenantUserPermissions(id, userId, dto, {
-      id: actor.id,
-      email: actor.email,
-    });
+    return this.tenantOpsService.setTenantUserPermissions(id, userId, dto, actor);
   }
 
   @Get('users/:userId/modules')
@@ -319,10 +314,7 @@ export class TenantOpsController {
     @Body() dto: SetTenantRolePermissionsDto,
     @CurrentUser() actor: CurrentUser,
   ) {
-    return this.tenantOpsService.setTenantRolePermissions(id, roleId, dto, {
-      id: actor.id,
-      email: actor.email,
-    });
+    return this.tenantOpsService.setTenantRolePermissions(id, roleId, dto, actor);
   }
 
   // ── Permissions / Login history / Sessions ──────────────────────────────────
@@ -345,10 +337,25 @@ export class TenantOpsController {
   @RequirePermissions('permissions:read')
   @ApiOperation({ summary: 'Get the manageable permission catalog for the current administrator' })
   getManageablePermissions(@Param('id') id: string, @CurrentUser() actor: CurrentUser) {
-    return this.tenantOpsService.getManageablePermissionCatalog(id, {
-      id: actor.id,
-      email: actor.email,
-    });
+    return this.tenantOpsService.getManageablePermissionCatalog(id, actor);
+  }
+
+  @Get('permission-pool')
+  @RequirePermissions('permissions:read')
+  @ApiOperation({ summary: 'Get the tenant permission pool configuration' })
+  getPermissionPool(@Param('id') id: string) {
+    return this.tenantOpsService.getTenantPermissionPool(id);
+  }
+
+  @Put('permission-pool')
+  @RequirePermissions('permissions:manage')
+  @ApiOperation({ summary: 'Set the tenant permission pool (Super Admin only)' })
+  setPermissionPool(
+    @Param('id') id: string,
+    @Body() dto: SetTenantPermissionPoolDto,
+    @CurrentUser() actor: CurrentUser,
+  ) {
+    return this.tenantOpsService.setTenantPermissionPool(id, dto, actor);
   }
 
   @Get('login-history')

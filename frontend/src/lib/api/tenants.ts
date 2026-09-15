@@ -193,6 +193,36 @@ export async function getManageablePermissionCatalog(id: string): Promise<Record
   return res.data;
 }
 
+export async function getTenantPermissionPool(id: string): Promise<{
+  allowedPermissions: string[];
+  deniedPermissions?: string[];
+  tier?: string;
+  allowCustomRoles?: boolean;
+  allowUserOverrides?: boolean;
+}> {
+  const res = await api.get<{
+    allowedPermissions: string[];
+    deniedPermissions?: string[];
+    tier?: string;
+    allowCustomRoles?: boolean;
+    allowUserOverrides?: boolean;
+  }>(`/tenants/${id}/permission-pool`);
+  return res.data;
+}
+
+export async function setTenantPermissionPool(
+  id: string,
+  config: {
+    allowedPermissions: string[];
+    deniedPermissions?: string[];
+    tier?: string;
+    allowCustomRoles?: boolean;
+    allowUserOverrides?: boolean;
+  },
+): Promise<void> {
+  await api.put(`/tenants/${id}/permission-pool`, config);
+}
+
 export async function assignTenantUserRole(
   id: string,
   userId: string,

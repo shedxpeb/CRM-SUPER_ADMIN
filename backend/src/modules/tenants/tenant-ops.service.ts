@@ -1,7 +1,6 @@
 import {
   BadRequestException,
   ConflictException,
-  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -11,6 +10,8 @@ import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { PrismaService } from '../../database/prisma.service';
 import { CrmPrismaService } from '../../database/crm-prisma.service';
 import { AuditService } from '../auth/services/audit.service';
+import { PermissionScopeService } from './permission-scope.service';
+import type { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { resolvePage, buildPageMeta } from '../../shared/helpers/pagination.helper';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 import { normalizeModuleKey } from '../../common/utils/module-key.util';
@@ -28,6 +29,7 @@ import {
   UpdateTenantRoleDto,
   UpdateTenantUserDto,
 } from './dto/tenant-crm.dto';
+import { SetTenantPermissionPoolDto } from './dto/tenant-permission-pool.dto';
 
 const DEFAULT_CRM_ROLE = 'EMPLOYEE';
 
@@ -76,6 +78,7 @@ export class TenantOpsService {
     private readonly prisma: PrismaService,
     private readonly crmPrisma: CrmPrismaService,
     private readonly auditService: AuditService,
+    private readonly permissionScopeService: PermissionScopeService,
   ) {}
 
   private get crm() {
@@ -695,7 +698,7 @@ export class TenantOpsService {
     tenantId: string,
     userId: string,
     dto: AssignTenantUserRoleDto,
-    actor: { id: string; email: string },
+    actor: CurrentUser,
   ) {
     const tenant = await ensureTenant(this.prisma, tenantId);
     const user = await this.crm.user.findFirst({
@@ -707,6 +710,11 @@ export class TenantOpsService {
       where: { id: dto.roleId, organizationId: tenant.crmOrganizationId, isDeleted: false },
     });
     if (!role) throw new NotFoundException('Role not found');
+
+    // NEW: Validate that role's permissions are within actor's scope
+    if (role.permissions && role.permissions.length > 0) {
+      await this.permissionScopeService.validateActorCanGrant(actor, tenantId, role.permissions);
+    }
 
     await this.crm.$transaction([
       this.crm.userRoleAssignment.deleteMany({
@@ -946,7 +954,7 @@ export class TenantOpsService {
     tenantId: string,
     userId: string,
     dto: SetTenantUserPermissionsDto,
-    actor: { id: string; email: string },
+    actor: CurrentUser,
   ) {
     const tenant = await ensureTenant(this.prisma, tenantId);
     const user = await this.crm.user.findFirst({
@@ -955,40 +963,12 @@ export class TenantOpsService {
     });
     if (!user) throw new NotFoundException('Tenant user not found');
 
-    // Security: Verify actor is Super Admin with permissions:manage
-    const platformActor = await this.prisma.platformUser.findUnique({
-      where: { id: actor.id },
-      select: { id: true, email: true },
-    });
-    if (!platformActor) throw new NotFoundException('Actor not found');
+    // NEW: Validate permissions are within tenant's pool
+    const allPermissions = [...dto.granted, ...dto.denied];
+    await this.permissionScopeService.validatePermissionsInPool(tenantId, allPermissions);
 
-    // Check if actor has the platform permission to manage permissions
-    const actorRoles = await this.prisma.platformRole.findMany({
-      where: {
-        users: {
-          some: { userId: actor.id },
-        },
-      },
-      select: { id: true, name: true },
-    });
-
-    const actorPermissions = await this.prisma.permission.findMany({
-      where: {
-        roles: {
-          some: {
-            roleId: {
-              in: actorRoles.map((r) => r.id),
-            },
-          },
-        },
-      },
-      select: { key: true },
-    });
-
-    const hasPermissionManage = actorPermissions.some((p) => p.key === 'permissions:manage');
-    if (!hasPermissionManage) {
-      throw new ForbiddenException('You do not have permission to manage user permissions');
-    }
+    // NEW: Validate actor can grant these permissions
+    await this.permissionScopeService.validateActorCanGrant(actor, tenantId, allPermissions);
 
     const entries: { permissionKey: string; granted: boolean }[] = [
       ...dto.granted.map((key) => ({ permissionKey: key, granted: true })),
@@ -1330,13 +1310,19 @@ export class TenantOpsService {
     tenantId: string,
     roleId: string,
     dto: SetTenantRolePermissionsDto,
-    actor: { id: string; email: string },
+    actor: CurrentUser,
   ) {
     const tenant = await ensureTenant(this.prisma, tenantId);
     const role = await this.crm.role.findFirst({
       where: { id: roleId, organizationId: tenant.crmOrganizationId, isDeleted: false },
     });
     if (!role) throw new NotFoundException('Role not found');
+
+    // NEW: Validate permissions are within tenant's pool
+    await this.permissionScopeService.validatePermissionsInPool(tenantId, dto.permissions);
+
+    // NEW: Validate actor can grant these permissions
+    await this.permissionScopeService.validateActorCanGrant(actor, tenantId, dto.permissions);
 
     const updated = await this.crm.role.update({
       where: { id: roleId },
@@ -1382,46 +1368,21 @@ export class TenantOpsService {
 
   async getManageablePermissionCatalog(
     tenantId: string,
-    actor: { id: string; email: string },
+    actor: CurrentUser,
   ): Promise<Record<string, string[]>> {
-    // Check if actor has permissions:manage (only Super Admins can manage permissions)
-    const platformActor = await this.prisma.platformUser.findUnique({
-      where: { id: actor.id },
-      select: { id: true, email: true },
-    });
-    if (!platformActor) throw new NotFoundException('Actor not found');
+    return this.permissionScopeService.getManageablePermissionCatalog(tenantId, actor);
+  }
 
-    // Check if actor has the platform permission to manage permissions
-    const actorRoles = await this.prisma.platformRole.findMany({
-      where: {
-        users: {
-          some: { userId: actor.id },
-        },
-      },
-      select: { id: true, name: true },
-    });
+  async getTenantPermissionPool(tenantId: string) {
+    return this.permissionScopeService.getTenantPermissionPool(tenantId);
+  }
 
-    const actorPermissions = await this.prisma.permission.findMany({
-      where: {
-        roles: {
-          some: {
-            roleId: {
-              in: actorRoles.map((r) => r.id),
-            },
-          },
-        },
-      },
-      select: { key: true },
-    });
-
-    const hasPermissionManage = actorPermissions.some((p) => p.key === 'permissions:manage');
-    if (!hasPermissionManage) {
-      // If user doesn't have permissions:manage, return empty catalog
-      return {};
-    }
-
-    // Super Admins with permissions:manage can manage all CRM permissions
-    return CRM_PERMISSION_CATALOG;
+  async setTenantPermissionPool(
+    tenantId: string,
+    dto: SetTenantPermissionPoolDto,
+    actor: CurrentUser,
+  ) {
+    return this.permissionScopeService.setTenantPermissionPool(tenantId, dto, actor);
   }
 
   async getTenantPermissions(tenantId: string): Promise<Record<string, Record<string, boolean>>> {
