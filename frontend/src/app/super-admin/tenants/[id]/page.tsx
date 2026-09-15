@@ -18,6 +18,7 @@ import {
   FileText,
   Save,
   ShieldCheck,
+  Shield,
   AlertCircle,
   CheckCircle2,
   XCircle,
@@ -61,6 +62,8 @@ import {
   useModuleCatalog,
   usePermissionCatalog,
   useManageablePermissionCatalog,
+  useTenantPermissionPool,
+  useSetTenantPermissionPool,
   useSetTenantRolePermissions,
   useUserRoles,
   useAssignTenantUserRole,
@@ -91,6 +94,7 @@ const TABS = [
   { key: 'users', label: 'Users', icon: Users },
   { key: 'roles', label: 'Roles', icon: ShieldCheck },
   { key: 'module-access', label: 'Module Access', icon: Puzzle },
+  { key: 'permission-scope', label: 'Permission Scope', icon: Shield },
   { key: 'activity', label: 'Activity', icon: History },
   { key: 'login-history', label: 'Login History', icon: LogIn },
   { key: 'audit-logs', label: 'Audit Logs', icon: FileText },
@@ -452,6 +456,20 @@ export default function TenantDetailPage() {
             ) : (
               <ModulesTab tenantId={id} modules={tenantModules.data ?? {}} onUpdate={updateTenantModules} saving={updateTenantModules.isPending} />
             )}
+          </CardContent>
+        </Card>
+      )}
+
+      {tab === 'permission-scope' && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base text-sa-text">Permission Scope</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-xs text-sa-text-muted mb-4">
+              Define the maximum CRM permissions this tenant can manage. Role assignments and user overrides cannot exceed this scope.
+            </p>
+            <PermissionScopeTab tenantId={id} />
           </CardContent>
         </Card>
       )}
@@ -1954,6 +1972,150 @@ function ModulesTab({
           <Save className="h-4 w-4" />
           {saving ? 'Saving…' : 'Save Module Changes'}
         </Button>
+      </div>
+    </div>
+  );
+}
+
+function PermissionScopeTab({ tenantId }: { tenantId: string }) {
+  const pool = useTenantPermissionPool(tenantId);
+  const catalog = usePermissionCatalog(tenantId);
+  const setPool = useSetTenantPermissionPool();
+  const [selectedPermissions, setSelectedPermissions] = useState<Set<string>>(new Set());
+  const [deniedPermissions, setDeniedPermissions] = useState<Set<string>>(new Set());
+  const [tier, setTier] = useState<string>('standard');
+  const [hasChanges, setHasChanges] = useState(false);
+
+  useEffect(() => {
+    if (pool.data) {
+      setSelectedPermissions(new Set(pool.data.allowedPermissions || []));
+      setDeniedPermissions(new Set(pool.data.deniedPermissions || []));
+      setTier(pool.data.tier || 'standard');
+    }
+  }, [pool.data]);
+
+  const handleTogglePermission = (permission: string) => {
+    const newSelected = new Set(selectedPermissions);
+    if (newSelected.has(permission)) {
+      newSelected.delete(permission);
+    } else {
+      newSelected.add(permission);
+    }
+    setSelectedPermissions(newSelected);
+    setHasChanges(true);
+  };
+
+  const handleToggleDenied = (permission: string) => {
+    const newDenied = new Set(deniedPermissions);
+    if (newDenied.has(permission)) {
+      newDenied.delete(permission);
+    } else {
+      newDenied.add(permission);
+    }
+    setDeniedPermissions(newDenied);
+    setHasChanges(true);
+  };
+
+  const handleSave = async () => {
+    await setPool.mutateAsync({
+      id: tenantId,
+      config: {
+        allowedPermissions: Array.from(selectedPermissions),
+        deniedPermissions: Array.from(deniedPermissions),
+        tier,
+        allowCustomRoles: true,
+        allowUserOverrides: true,
+      },
+    });
+    setHasChanges(false);
+  };
+
+  if (pool.isLoading || catalog.isLoading) return <LoadingState label="Loading permission scope…" />;
+  if (pool.isError || catalog.isError)
+    return <ErrorState message="Failed to load permission scope" onRetry={() => { pool.refetch(); catalog.refetch(); }} />;
+
+  const groupedPermissions = catalog.data || {};
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-2">
+          <label className="text-xs text-sa-text-muted">Tier:</label>
+          <select
+            value={tier}
+            onChange={(e) => { setTier(e.target.value); setHasChanges(true); }}
+            className="px-3 py-1.5 rounded-md border border-sa-border bg-sa-input text-sm text-sa-text"
+          >
+            <option value="basic">Basic</option>
+            <option value="standard">Standard</option>
+            <option value="premium">Premium</option>
+          </select>
+        </div>
+        <Button disabled={!hasChanges || setPool.isPending} onClick={handleSave} className="gap-2">
+          <Save className="h-4 w-4" />
+          {setPool.isPending ? 'Saving…' : 'Save Scope'}
+        </Button>
+      </div>
+
+      <div className="space-y-6">
+        {Object.entries(groupedPermissions).sort().map(([module, permissions]) => {
+          const moduleDisplayName = getModuleDisplayName(module);
+          const selectedCount = permissions.filter((p) => selectedPermissions.has(p)).length;
+          const deniedCount = permissions.filter((p) => deniedPermissions.has(p)).length;
+
+          return (
+            <div key={module} className="border border-sa-border rounded-lg overflow-hidden">
+              <div className="px-4 py-3 bg-sa-chart-bg border-b border-sa-border flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-medium text-sa-text">{moduleDisplayName}</h3>
+                  <p className="text-xs text-sa-text-muted">
+                    {permissions.length} permissions · {selectedCount} allowed · {deniedCount} denied
+                  </p>
+                </div>
+              </div>
+              <div className="p-4 space-y-2">
+                {permissions.map((permission) => {
+                  const metadata = getPermissionMetadata(permission);
+                  const isSelected = selectedPermissions.has(permission);
+                  const isDenied = deniedPermissions.has(permission);
+
+                  return (
+                    <div key={permission} className="flex items-center justify-between gap-4 py-2 px-3 rounded hover:bg-sa-input transition-colors">
+                      <div className="flex-1">
+                        <p className="text-sm text-sa-text">{metadata.label}</p>
+                        <p className="text-xs text-sa-text-muted">{metadata.description}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleTogglePermission(permission)}
+                          className={cn(
+                            'px-3 py-1.5 rounded-md text-xs font-medium border transition-colors',
+                            isSelected
+                              ? 'border-green-500/50 bg-green-500/10 text-green-500'
+                              : 'border-sa-border text-sa-text-muted hover:border-green-500/40',
+                          )}
+                        >
+                          {isSelected ? 'Allowed' : 'Allow'}
+                        </button>
+                        <button
+                          onClick={() => handleToggleDenied(permission)}
+                          className={cn(
+                            'px-3 py-1.5 rounded-md text-xs font-medium border transition-colors',
+                            isDenied
+                              ? 'border-red-500/50 bg-red-500/10 text-red-400'
+                              : 'border-sa-border text-sa-text-muted hover:border-red-500/40',
+                          )}
+                        >
+                          {isDenied ? 'Denied' : 'Deny'}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

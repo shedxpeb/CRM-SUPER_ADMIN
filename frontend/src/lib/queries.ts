@@ -136,6 +136,26 @@ export function useManageablePermissionCatalog(tenantId: string) {
   });
 }
 
+export function useTenantPermissionPool(tenantId: string) {
+  return useQuery({
+    queryKey: ['tenants', tenantId, 'permission-pool'] as const,
+    queryFn: () => tenantsApi.getTenantPermissionPool(tenantId),
+    enabled: !!tenantId,
+  });
+}
+
+export function useSetTenantPermissionPool() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, config }: { id: string; config: Parameters<typeof tenantsApi.setTenantPermissionPool>[1] }) =>
+      tenantsApi.setTenantPermissionPool(id, config),
+    onSuccess: (_, { id }) => {
+      queryClient.invalidateQueries({ queryKey: ['tenants', id, 'permission-pool'] });
+      queryClient.invalidateQueries({ queryKey: ['tenants', id, 'permissions', 'manageable'] });
+    },
+  });
+}
+
 export function useUserRoles(tenantId: string, userId: string | null) {
   return useQuery({
     queryKey: ['tenants', tenantId, 'users', userId, 'roles'] as const,

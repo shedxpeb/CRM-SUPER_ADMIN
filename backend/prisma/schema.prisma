@@ -289,6 +289,8 @@ model Tenant {
   maxStorageGB        Int          @default(10)
   modulesEnabled      Json?        // JSON array of enabled module keys
   permissionPool      Json?        // Pool of permissions delegated to tenant admin
+  poolModifiedById    String?      // ID of Super Admin who last modified the permission pool
+  poolModifiedAt      DateTime?    // Timestamp of last permission pool modification
   roleHierarchyEnabled Boolean     @default(true)
   maxRoleDepth        Int          @default(5) // Maximum hierarchy depth
   customPermissionsEnabled Boolean @default(false)
