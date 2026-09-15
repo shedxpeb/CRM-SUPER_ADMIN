@@ -4,6 +4,7 @@ import { CRM_PERMISSION_CATALOG } from './crm-provisioning.constants';
 import type { CurrentUser } from '../../common/decorators/current-user.decorator';
 import type { TenantPermissionPoolConfig } from './dto/tenant-permission-pool.dto';
 import { TenantTier } from './dto/tenant-permission-pool.dto';
+import { Prisma } from '@prisma/client';
 
 /**
  * PermissionScopeService manages tenant-level permission boundaries.
@@ -79,7 +80,7 @@ export class PermissionScopeService {
     await this.prisma.tenant.update({
       where: { id: tenantId },
       data: {
-        permissionPool: config as unknown as Prisma.JsonValue,
+        permissionPool: config as unknown as Prisma.InputJsonValue,
         poolModifiedById: actor.id,
         poolModifiedAt: new Date(),
       },

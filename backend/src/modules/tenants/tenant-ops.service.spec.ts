@@ -5,7 +5,6 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { PrismaService } from '../../database/prisma.service';
 import { CrmPrismaService } from '../../database/crm-prisma.service';
 import { AuditService } from '../auth/services/audit.service';
-import { PermissionScopeService } from './permission-scope.service';
 import { TenantOpsService } from './tenant-ops.service';
 import { CreateTenantUserDto } from './dto/tenant-crm.dto';
 
@@ -17,8 +16,6 @@ describe('TenantOpsService - createTenantUser', () => {
   let crmPrismaService: any;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let auditService: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let permissionScopeService: any;
 
   const mockTenant = {
     id: 'tenant-1',
@@ -67,13 +64,6 @@ describe('TenantOpsService - createTenantUser', () => {
             record: jest.fn(),
           },
         },
-        {
-          provide: PermissionScopeService,
-          useValue: {
-            validatePermissionsInPool: jest.fn(),
-            validateActorCanGrant: jest.fn(),
-          },
-        },
       ],
     }).compile();
 
@@ -81,7 +71,6 @@ describe('TenantOpsService - createTenantUser', () => {
     prismaService = module.get(PrismaService);
     crmPrismaService = module.get(CrmPrismaService);
     auditService = module.get(AuditService);
-    permissionScopeService = module.get(PermissionScopeService);
   });
 
   describe('TEST 1: Create completely new email', () => {
@@ -282,8 +271,6 @@ describe('TenantOpsService - softDeleteTenantUser (Hard Delete)', () => {
   let crmPrismaService: any;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let auditService: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let permissionScopeService: any;
 
   const mockTenant = {
     id: 'tenant-1',
@@ -325,13 +312,6 @@ describe('TenantOpsService - softDeleteTenantUser (Hard Delete)', () => {
             record: jest.fn(),
           },
         },
-        {
-          provide: PermissionScopeService,
-          useValue: {
-            validatePermissionsInPool: jest.fn(),
-            validateActorCanGrant: jest.fn(),
-          },
-        },
       ],
     }).compile();
 
@@ -339,7 +319,6 @@ describe('TenantOpsService - softDeleteTenantUser (Hard Delete)', () => {
     prismaService = module.get(PrismaService);
     crmPrismaService = module.get(CrmPrismaService);
     auditService = module.get(AuditService);
-    permissionScopeService = module.get(PermissionScopeService);
   });
 
   describe('Hard delete user', () => {
