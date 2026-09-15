@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -954,6 +955,41 @@ export class TenantOpsService {
     });
     if (!user) throw new NotFoundException('Tenant user not found');
 
+    // Security: Verify actor is Super Admin with permissions:manage
+    const platformActor = await this.prisma.platformUser.findUnique({
+      where: { id: actor.id },
+      select: { id: true, email: true },
+    });
+    if (!platformActor) throw new NotFoundException('Actor not found');
+
+    // Check if actor has the platform permission to manage permissions
+    const actorRoles = await this.prisma.platformRole.findMany({
+      where: {
+        users: {
+          some: { userId: actor.id },
+        },
+      },
+      select: { id: true, name: true },
+    });
+
+    const actorPermissions = await this.prisma.permission.findMany({
+      where: {
+        roles: {
+          some: {
+            roleId: {
+              in: actorRoles.map((r) => r.id),
+            },
+          },
+        },
+      },
+      select: { key: true },
+    });
+
+    const hasPermissionManage = actorPermissions.some((p) => p.key === 'permissions:manage');
+    if (!hasPermissionManage) {
+      throw new ForbiddenException('You do not have permission to manage user permissions');
+    }
+
     const entries: { permissionKey: string; granted: boolean }[] = [
       ...dto.granted.map((key) => ({ permissionKey: key, granted: true })),
       ...dto.denied.map((key) => ({ permissionKey: key, granted: false })),
@@ -1341,6 +1377,50 @@ export class TenantOpsService {
   // ── Tenant permissions / login history / sessions ───────────────────────────
 
   getPermissionCatalog(): Record<string, string[]> {
+    return CRM_PERMISSION_CATALOG;
+  }
+
+  async getManageablePermissionCatalog(
+    tenantId: string,
+    actor: { id: string; email: string },
+  ): Promise<Record<string, string[]>> {
+    // Check if actor has permissions:manage (only Super Admins can manage permissions)
+    const platformActor = await this.prisma.platformUser.findUnique({
+      where: { id: actor.id },
+      select: { id: true, email: true },
+    });
+    if (!platformActor) throw new NotFoundException('Actor not found');
+
+    // Check if actor has the platform permission to manage permissions
+    const actorRoles = await this.prisma.platformRole.findMany({
+      where: {
+        users: {
+          some: { userId: actor.id },
+        },
+      },
+      select: { id: true, name: true },
+    });
+
+    const actorPermissions = await this.prisma.permission.findMany({
+      where: {
+        roles: {
+          some: {
+            roleId: {
+              in: actorRoles.map((r) => r.id),
+            },
+          },
+        },
+      },
+      select: { key: true },
+    });
+
+    const hasPermissionManage = actorPermissions.some((p) => p.key === 'permissions:manage');
+    if (!hasPermissionManage) {
+      // If user doesn't have permissions:manage, return empty catalog
+      return {};
+    }
+
+    // Super Admins with permissions:manage can manage all CRM permissions
     return CRM_PERMISSION_CATALOG;
   }
 

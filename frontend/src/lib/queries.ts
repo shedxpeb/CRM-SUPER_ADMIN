@@ -128,6 +128,14 @@ export function usePermissionCatalog(tenantId: string) {
   });
 }
 
+export function useManageablePermissionCatalog(tenantId: string) {
+  return useQuery({
+    queryKey: ['tenants', tenantId, 'permissions', 'manageable'] as const,
+    queryFn: () => tenantsApi.getManageablePermissionCatalog(tenantId),
+    enabled: !!tenantId,
+  });
+}
+
 export function useUserRoles(tenantId: string, userId: string | null) {
   return useQuery({
     queryKey: ['tenants', tenantId, 'users', userId, 'roles'] as const,

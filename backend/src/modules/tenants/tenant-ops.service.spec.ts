@@ -208,11 +208,11 @@ describe('TenantOpsService - createTenantUser', () => {
       (crmPrismaService.user.findFirst as jest.Mock).mockResolvedValue(null);
 
       // Simulate P2002 unique constraint error
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { PrismaClientKnownRequestError } = require('@prisma/client/runtime/library');
-      const prismaError = new PrismaClientKnownRequestError(
-        'Unique constraint failed',
-        { code: 'P2002' },
-      );
+      const prismaError = new PrismaClientKnownRequestError('Unique constraint failed', {
+        code: 'P2002',
+      });
       (crmPrismaService.user.create as jest.Mock).mockRejectedValue(prismaError);
 
       await expect(service.createTenantUser('tenant-1', dto, mockActor)).rejects.toThrow(

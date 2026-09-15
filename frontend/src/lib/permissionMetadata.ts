@@ -319,6 +319,44 @@ export const PERMISSION_METADATA: Record<string, PermissionMetadata> = {
     action: 'Approve',
   },
 
+  // Finance permissions
+  'finance:list': {
+    module: 'Finance',
+    label: 'View Finance Records',
+    description: 'Allows the user to view the list of finance records',
+    action: 'View',
+  },
+  'finance:read': {
+    module: 'Finance',
+    label: 'View Finance Details',
+    description: 'Allows the user to view individual finance record details',
+    action: 'View',
+  },
+  'finance:create': {
+    module: 'Finance',
+    label: 'Create Finance Records',
+    description: 'Allows the user to create new finance records',
+    action: 'Create',
+  },
+  'finance:update': {
+    module: 'Finance',
+    label: 'Edit Finance Records',
+    description: 'Allows the user to edit finance record information',
+    action: 'Edit',
+  },
+  'finance:delete': {
+    module: 'Finance',
+    label: 'Delete Finance Records',
+    description: 'Allows the user to delete finance records',
+    action: 'Delete',
+  },
+  'finance:approve': {
+    module: 'Finance',
+    label: 'Approve Finance Records',
+    description: 'Allows the user to approve finance records',
+    action: 'Approve',
+  },
+
   // Role permissions
   'role:list': {
     module: 'Role',
@@ -533,6 +571,7 @@ export function getModuleDisplayName(moduleKey: string): string {
     'customer': 'Customer',
     'dashboard': 'Dashboard',
     'document': 'Document',
+    'finance': 'Finance',
     'inventory': 'Inventory',
     'item-master': 'Item Master',
     'lead': 'Lead',
