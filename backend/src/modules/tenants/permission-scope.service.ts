@@ -79,7 +79,7 @@ export class PermissionScopeService {
     await this.prisma.tenant.update({
       where: { id: tenantId },
       data: {
-        permissionPool: config as unknown as Prisma.JsonValue,
+        permissionPool: config as unknown,
         poolModifiedById: actor.id,
         poolModifiedAt: new Date(),
       },
