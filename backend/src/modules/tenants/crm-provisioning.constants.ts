@@ -108,6 +108,7 @@ export const CRM_DEFAULT_MODULES = [
   'inventory',
   'vendor',
   'purchase-order',
+  'finance',
   'task',
   'user',
   'role',
