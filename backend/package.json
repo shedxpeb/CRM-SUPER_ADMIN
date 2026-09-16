@@ -28,7 +28,8 @@
     "seed:1000": "ts-node prisma/seed.ts 1000",
     "seed:5000": "ts-node prisma/seed.ts 5000",
     "seed:clean": "ts-node prisma/seed-clean.ts",
-    "seed:super-admin": "ts-node prisma/seed-super-admin.ts"
+    "seed:super-admin": "ts-node prisma/seed-super-admin.ts",
+    "add-finance-module": "ts-node prisma/add-finance-module.ts"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"
